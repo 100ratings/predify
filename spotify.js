@@ -1,0 +1,161 @@
+import { spotifyId, cleanTrack } from './engine.js?v=1.2.43';
+import { candidateScore } from './catalog-import.js?v=1.2.43';
+import { searchQuery, matchingTracks } from './catalog-search.js?v=1.2.43';
+export const CLIENT_ID = 'ea812e9b0ada47778150c48b62bf02ee';
+export const SCOPES = ['playlist-modify-public', 'playlist-modify-private', 'playlist-read-private'];
+const KEY = 'predify.auth.v1';
+let refreshInFlight;
+const timeoutSignal = () => AbortSignal.timeout(25000);
+export function redirectUri() { return new URL('./', location.href).href.split('?')[0].split('#')[0]; }
+export function auth() { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; } }
+export function disconnect() { localStorage.removeItem(KEY); }
+function saveAuth(data, previous = {}) {
+  const saved = { access_token: data.access_token, refresh_token: data.refresh_token || previous.refresh_token, expires_at: Date.now() + data.expires_in * 1000, scope: data.scope || previous.scope || '' };
+  localStorage.setItem(KEY, JSON.stringify(saved));
+  return saved;
+}
+async function tokenRequest(body) {
+  const response = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body), signal: timeoutSignal() });
+  const result = await response.json();
+  if (!response.ok) {
+    if (result.error === 'invalid_grant') {
+      if (body.grant_type === 'refresh_token') {
+        disconnect();
+        throw new Error('A sessão do Spotify expirou ou foi revogada, conecte novamente');
+      }
+      throw new Error('O código de autorização do Spotify expirou ou já foi utilizado, toque novamente em Conectar Spotify');
+    }
+    throw new Error('O Spotify recusou a conexão (' + (result.error || response.status) + '), tente novamente');
+  }
+  return result;
+}
+const random = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
+export async function connect() {
+  const verifier = random(); const state = random();
+  // localStorage preserves the verifier if iOS returns through another app window
+  localStorage.setItem('predify.oauth', JSON.stringify({ verifier, state, redirect: redirectUri(), time: Date.now() }));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const params = new URLSearchParams({ client_id: CLIENT_ID, response_type: 'code', redirect_uri: redirectUri(), scope: SCOPES.join(' '), state, code_challenge_method: 'S256', code_challenge: challenge });
+  location.assign('https://accounts.spotify.com/authorize?' + params);
+}
+export async function finishLogin() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('code') && !params.has('error')) return false;
+  history.replaceState(null, '', location.pathname);
+  let pending = null;
+  try { pending = JSON.parse(localStorage.getItem('predify.oauth') || 'null'); } catch { /* Invalid stored request */ }
+  localStorage.removeItem('predify.oauth');
+  if (params.has('error')) throw new Error('O Spotify não autorizou a conexão (' + params.get('error') + '), tente novamente');
+  if (!pending) throw new Error('O Spotify retornou sem encontrar a solicitação de login neste navegador, isso pode ocorrer quando o iPhone abre o retorno em outra janela, tente conectar novamente no mesmo navegador');
+  if (pending.state !== params.get('state')) throw new Error('O retorno do Spotify não corresponde à solicitação de login, tente novamente');
+  if (Date.now() - pending.time > 10 * 60 * 1000) throw new Error('O login do Spotify demorou demais e expirou, tente novamente');
+  if (pending.redirect !== redirectUri()) throw new Error('O retorno do Spotify abriu em um endereço diferente, conecte novamente no mesmo navegador');
+  const data = await tokenRequest({ grant_type: 'authorization_code', code: params.get('code'), client_id: CLIENT_ID, redirect_uri: pending.redirect, code_verifier: pending.verifier });
+  if (!SCOPES.every(scope => (data.scope || '').split(' ').includes(scope))) throw new Error('Faltaram permissões de playlist, conecte novamente');
+  saveAuth(data); return true;
+}
+export async function accessToken(force = false) {
+  const current = auth();
+  if (!current) throw new Error('Conecte sua conta do Spotify');
+  if (!force && current.expires_at > Date.now() + 60000) return current.access_token;
+  if (!current.refresh_token) { disconnect(); throw new Error('Conecte o Spotify novamente para manter sua sessão'); }
+  if (!refreshInFlight) refreshInFlight = tokenRequest({ grant_type: 'refresh_token', refresh_token: current.refresh_token, client_id: CLIENT_ID }).then(data => saveAuth(data, current).access_token).finally(() => { refreshInFlight = null; });
+  return refreshInFlight;
+}
+export async function api(path, options = {}, retry = true) {
+  if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Caminho da API inválido');
+  const token = await accessToken();
+  const response = await fetch('https://api.spotify.com/v1' + path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: timeoutSignal() });
+  if (response.status === 401 && retry) { await accessToken(true); return api(path, options, false); }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get('Retry-After'));
+      const error = new Error('Muitas solicitações ao Spotify');
+      error.retryAfter = Number.isFinite(seconds) && seconds >= 0 ? seconds : 15;
+      throw error;
+    }
+    if (response.status === 403) throw new Error('O Spotify recusou o acesso, confira a conta Premium, as permissões e se a playlist é sua');
+    if (response.status === 404) throw new Error('Música ou playlist não encontrada no Spotify');
+    throw new Error(`Spotify ${response.status}: ${data.error?.message || 'não foi possível concluir'}`);
+  }
+  return data;
+}
+export async function myPlaylists() {
+  const me = await api('/me'); const items = []; let path = '/me/playlists?limit=50';
+  while (path) {
+    const page = await api(path);
+    items.push(...(page.items || []).filter(item => item && item.owner?.id === me.id));
+    path = page.next ? page.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+  return { me, items };
+}
+export async function trackFromLink(link) {
+  const id = spotifyId(link);
+  if (!id) throw new Error('Cole o link de uma música do Spotify, não o link de álbum ou playlist');
+  const track = await api('/tracks/' + id);
+  if (track.is_playable === false) throw new Error('Essa música não está disponível para sua conta');
+  return { id: track.id, uri: track.uri, name: track.name, artist: (track.artists || []).map(artist => artist.name).join(', '), image: track.album?.images?.at(-1)?.url || '' };
+}
+export async function playlistCoverImages(id) {
+  if (!spotifyId(id, 'playlist')) throw new Error('Playlist inválida');
+  const images = await api('/playlists/' + id + '/images');
+  return Array.isArray(images) ? images : [];
+}
+export async function playlistTracks(id, { preserveUnavailable = false } = {}) {
+  const tracks = []; let path = `/playlists/${id}/items?limit=50`;
+  while (path) {
+    const page = await api(path);
+    const entries = (page.items || []).map(item => item.item || item.track || null);
+    tracks.push(...(preserveUnavailable ? entries : entries.filter(Boolean)));
+    path = page.next ? page.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+  return tracks;
+}
+export async function replacePlaylist(id, tracks) {
+  if (!spotifyId(id, 'playlist') || !tracks.length || tracks.length > 100) throw new Error('Playlist ou lista de músicas inválida');
+  return api(`/playlists/${id}/items`, { method: 'PUT', body: JSON.stringify({ uris: tracks.map(track => track.uri) }) });
+}
+
+export async function searchTracks(letter, text = '', offset = 0) {
+  const q = searchQuery(letter, text);
+  const tracks = [];
+  let nextOffset = offset;
+  let more = false;
+  // A bounded batch: Spotify returns up to ten raw results per request
+  // Filter locally because a title-field match is not necessarily an initial match
+  for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+    const params = new URLSearchParams({ q, type: 'track', limit: '10', offset: String(nextOffset) });
+    const result = await api('/search?' + params);
+    const page = result.tracks || {};
+    tracks.push(...matchingTracks(page.items, letter));
+    nextOffset = (page.offset ?? nextOffset) + (page.items?.length || 0);
+    more = !!page.next && nextOffset <= 1000 && !!page.items?.length;
+    if (!more || tracks.length >= 8) break;
+  }
+  const unique = [...new Map(tracks.map(track => [track.id, track])).values()];
+  return { tracks: unique, offset: nextOffset, more };
+}
+
+export async function resolveCatalogCandidate(candidate) {
+  if (candidate.id) {
+    const known = await trackFromLink(candidate.id);
+    if (candidateScore(known, candidate) >= 145) return cleanTrack(known);
+  }
+  const firstArtist = candidate.artist.split(/\s+(?:feat\.?|ft\.?|&)\s+/i)[0];
+  const queries = [candidate.name + ' ' + firstArtist, 'track:' + candidate.name];
+  let best = null, bestScore = -Infinity;
+  for (const q of queries) {
+    const params = new URLSearchParams({ q, type: 'track', limit: '10', market: 'BR' });
+    const response = await api('/search?' + params);
+    for (const item of response.tracks?.items || []) {
+      if (!item?.id || item.is_local || item.is_playable === false) continue;
+      const score = candidateScore(item, candidate);
+      if (score > bestScore) { bestScore = score; best = item; }
+    }
+    if (bestScore >= 145) break;
+  }
+  if (!best || bestScore < 145) return null;
+  return cleanTrack({ ...best, artist: (best.artists || []).map(item => item.name).join(', '), image: best.album?.images?.at(-1)?.url || '' });
+}
