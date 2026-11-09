@@ -129,3 +129,23 @@ test('stop cancels a start still reading its configuration and concurrent starts
   assert.equal(f.monitor.s.active,false);
   assert.equal(f.state.alarm,undefined);
 });
+
+test('Spotify Retry-After applies to newer Inject counts too',async()=>{
+  const {emptyCatalog}=await import('../engine.js');
+  const catalog=emptyCatalog();catalog.A[0]={id:'A'.repeat(22),uri:'spotify:track:'+'A'.repeat(22),name:'Anna Julia',artist:'Los Hermanos',image:''};
+  const f=fixture();await f.ctx.ready;
+  const realFetch=globalThis.fetch,realNow=Date.now,realTimer=globalThis.setTimeout;
+  let time=realNow(),reads=0,puts=0;
+  Date.now=()=>time;globalThis.setTimeout=(fn,ms)=>{time+=ms;queueMicrotask(fn);return 1;};
+  globalThis.fetch=async url=>{
+    if(String(url).startsWith('https://11z.co')) {time+=60;return Response.json({count:++reads,value:'a'});}
+    puts++;return Response.json({error:'rate limit'},{status:429,headers:{'Retry-After':'15'}});
+  };
+  try {
+    await f.monitor.fetch(request('start',{mode:'live',injectId:'5156',minutes:1,playlist:'P'.repeat(22),catalog,auth:{access_token:'private',refresh_token:'private',expires_at:time+3600000}}));
+    await f.monitor.alarm();if(f.monitor.delivery)await f.monitor.delivery;
+    assert.ok(reads>10);assert.equal(puts,1);assert.equal(f.monitor.s.lastSuccess,null);
+    assert.ok(f.monitor.s.spotifyRetryAt>time);
+    await f.monitor.fetch(request('stop',{}));
+  } finally {globalThis.fetch=realFetch;Date.now=realNow;globalThis.setTimeout=realTimer;}
+});

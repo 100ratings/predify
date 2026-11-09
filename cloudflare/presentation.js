@@ -132,7 +132,11 @@ export class PresentationMonitor extends DurableObject {
       body:new URLSearchParams({grant_type:'refresh_token',refresh_token:this.token.refresh_token,client_id:CLIENT_ID}),signal:AbortSignal.timeout(7000)});
     const data = await res.json();
     if (!this.s.active || this.s.runId !== runId) throw new Error('Apresentação encerrada');
-    if (!res.ok || !data.access_token) throw new Error('O Spotify precisa de uma nova conexão');
+    if (!res.ok || !data.access_token) {
+      const error = new Error('O Spotify precisa de uma nova conexão');
+      error.fatal = res.status === 400 || res.status === 401 || res.status === 403;
+      throw error;
+    }
     this.token = {access_token:data.access_token,refresh_token:data.refresh_token || this.token.refresh_token,expires_at:Date.now()+data.expires_in*1000};
     this.s.sealedAuth = await seal(this.token,this.env.TOKEN_ENCRYPTION_KEY);
     this.s.authUpdatedAt = Date.now();
@@ -141,6 +145,7 @@ export class PresentationMonitor extends DurableObject {
   }
   async send(runId) {
     while (this.s.active && this.s.runId === runId && this.s.pending) {
+      if (Date.now() < (this.s.spotifyRetryAt || 0)) return;
       const event = this.s.pending;
       if (event.retryAt && Date.now() < event.retryAt) return;
       const result = buildSequence({name:event.value,catalog:this.s.config.catalog,opening:this.s.config.opening});
@@ -160,16 +165,23 @@ export class PresentationMonitor extends DurableObject {
         if (!this.s.active || this.s.runId !== runId) return;
         if (res.status === 429) {
           event.phase = 'queued'; event.retryAt = Date.now()+Math.max(1000,(Number(res.headers.get('Retry-After')) || 15)*1000);
+          this.s.spotifyRetryAt = event.retryAt;
           if (this.s.pending === event) this.s.pending = event;
           this.s.lastError = 'Spotify limitou os envios, aguardando o prazo solicitado';
           await this.save(); return;
         }
+        if (res.status === 401 || res.status === 403) {
+          const error = new Error('O Spotify recusou o acesso, reconecte a conta e confira a playlist');
+          error.fatal = true; throw error;
+        }
         if (!res.ok || typeof body.snapshot_id !== 'string') throw new Error(res.ok ? 'Spotify respondeu sem confirmação da playlist' : 'Spotify HTTP '+res.status+', confira a playlist');
         this.s.lastSuccess = {word:event.value,playlist:this.s.config.playlist,count:event.count,snapshotId:body.snapshot_id,at:Date.now()};
         this.s.lastError = '';
+        this.s.spotifyRetryAt = 0;
       } catch(e) {
         if (this.s.runId !== runId) return;
         this.s.lastError = e.message + ', envio não repetido automaticamente';
+        if (e.fatal) { await this.finish('spotify-auth'); return; }
       } finally { this.spotifyAbort = null; }
       if (this.s.pending === event) this.s.pending = null;
       await this.save();
