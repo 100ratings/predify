@@ -1,15 +1,22 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.2.43';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.2.43';
-import { SUGGESTIONS } from './suggestions.js?v=1.2.43';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.2.43';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.2.43';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.2.43';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.2.43';
-import { preventZoom } from './zoom.js?v=1.2.43';
-import { createKeepAwake } from './keep-awake.js?v=1.2.43';
-import { watchAppUpdates } from './updates.js?v=1.2.43';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.2.43';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.2.43';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.0';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.0';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.0';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.0';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.0';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.0';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.0';
+import { preventZoom } from './zoom.js?v=1.3.0';
+import { createKeepAwake } from './keep-awake.js?v=1.3.0';
+import { watchAppUpdates } from './updates.js?v=1.3.0';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.0';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.0';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.0';
+try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
+let remoteState = { active: false };
+let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
+let remoteMessage = '';
+let remoteRevision = 0;
+const remoteOwnsPlaylist = () => remoteBusy || remoteUnknown || remoteState.active;
 const $ = id => document.getElementById(id);
 const DATA_KEY = 'predify.data.v1';
 const LAST_SUCCESS_KEY = 'predify.last-success.v1';
@@ -148,12 +155,12 @@ function paintAccount(me) {
   updateButton();
 }
 function updateButton() {
-  $('update').disabled = sending || playlistBusy || playlistLoading || importingCatalog || !auth() || !data.playlist || !playlists.some(p => p.id === data.playlist) || !!sequence.error || !sequence.tracks.length;
+  $('update').disabled = remoteOwnsPlaylist() || sending || playlistBusy || playlistLoading || importingCatalog || !auth() || !data.playlist || !playlists.some(p => p.id === data.playlist) || !!sequence.error || !sequence.tracks.length;
   $('update').querySelector('span').textContent = sending ? 'Atualizando…' : 'Atualizar playlist';
-  $('playlist').disabled = sending || playlistBusy || loadingLists || !auth();
+  $('playlist').disabled = remoteOwnsPlaylist() || sending || playlistBusy || loadingLists || !auth();
   $('person-name').disabled = sending;
   $('reload-playlists').disabled = loadingLists || sending || !auth();
-
+  paintRemote();
 }
 function cover(track, className = 'cover') {
   const element = node('div', className, '♫');
@@ -555,6 +562,7 @@ $('save-opening').onclick = () => {
   } catch (error) { toast(error.message, true); }
 };
 async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } = {}) {
+  if (remoteOwnsPlaylist()) return false;
   if (sending || playlistBusy || playlistLoading || importingCatalog || !auth() || !data.playlist) return false;
   const selected = playlists.find(playlist => playlist.id === data.playlist);
   if (!selected || !tracks.length) return false;
@@ -640,8 +648,14 @@ $('connect').onclick = async () => {
   }
   finally { if (!auth()) $('connect').disabled = false; }
 };
-$('disconnect').onclick = () => {
+$('disconnect').onclick = async () => {
   if (!confirm('Tem certeza de que deseja desconectar o Spotify deste aparelho?\n\nVocê precisará conectar novamente para atualizar suas playlists\n\nSeu catálogo e sua abertura fixa serão preservados')) return;
+  if (remoteKey()) {
+    remoteRevision++; remoteBusy = true; updateButton();
+    try { await remoteRequest('stop', {}); remoteState.active = false; remoteUnknown = false; }
+    catch (error) { toast('Encerre o monitor remoto antes de desconectar: '+error.message,true); return; }
+    finally { remoteBusy = false; updateButton(); }
+  }
   disconnect();
   playlists = []; playlistItems = []; playlistLoadedFor = '';
   $('playlist').replaceChildren(new Option('Conecte o Spotify', ''));
@@ -665,7 +679,7 @@ const injectStatus = (message, error = false) => {
   $('inject-status').classList.toggle('inject-error', error);
 };
 const injectMonitor = createInjectMonitor({
-  active: () => !document.hidden && navigator.onLine && !!auth() && !!data.playlist && playlists.some(p => p.id === data.playlist),
+  active: () => !remoteKey() && !remoteBusy && !document.hidden && navigator.onLine && !!auth() && !!data.playlist && playlists.some(p => p.id === data.playlist),
   onSelection: async event => {
   if (sending || playlistBusy || playlistLoading || importingCatalog || !auth() ||
       !data.playlist || !playlists.some(p => p.id === data.playlist)) return 'defer';
@@ -689,6 +703,107 @@ const injectMonitor = createInjectMonitor({
     else if (event.kind === 'error') injectStatus('Não foi possível consultar o Inject: ' + event.message + '. Nova tentativa automática', true);
   }
 });
+function paintRemote() {
+  const paired = !!remoteKey();
+  $('remote-start').disabled = !paired || remoteOwnsPlaylist() || sending || playlistBusy || playlistLoading || importingCatalog || !auth() || !data.playlist || !validInjectId(injectIdInput.value);
+  $('remote-stop').disabled = !paired || remoteBusy || (!remoteState.active && !remoteUnknown);
+  $('remote-test').disabled = !paired || remoteOwnsPlaylist() || sending || !validInjectId(injectIdInput.value);
+  $('remote-duration').disabled = remoteOwnsPlaylist();
+  $('remote-pair').disabled = remoteBusy;
+  $('remote-unpair').disabled = !paired || remoteBusy;
+  $('remote-key').placeholder = paired ? 'Monitor conectado' : 'Cole a chave privada do monitor';
+  $('remote-badge').textContent = remoteState.active ? remoteState.mode === 'test' ? 'Teste ativo' : 'Ativa' : paired ? 'Conectado' : 'Cloudflare';
+  let message = paired ? 'Pronto para iniciar, funciona com o iPhone bloqueado' : 'Conecte o monitor remoto em Ajustes para usar com a tela bloqueada';
+  if (remoteUnknown) message = 'Confirmando o estado do monitor remoto';
+  if (remoteState.active) {
+    const until = new Date(remoteState.endsAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    message = (remoteState.mode === 'test' ? 'Teste sem Spotify' : 'Apresentação ativa')+' até '+until+' · '+remoteState.polls+' leituras';
+    if (remoteState.lastValue) message += ' · Última recebida: '+remoteState.lastValue;
+  } else if (remoteState.phase === 'expired') message = 'Apresentação encerrada automaticamente';
+  else if (remoteState.phase === 'stopped') message = 'Apresentação encerrada';
+  else if (remoteState.phase === 'daily-limit') message = 'Monitor encerrado pelo limite diário de segurança';
+  if (remoteState.lastError) message += ' · '+remoteState.lastError;
+  $('remote-status').textContent = remoteMessage || message;
+}
+function applyRemoteStatus(state) {
+  remoteState = state;
+  remoteUnknown = false;
+  const sent = state.lastSuccess;
+  if (sent?.snapshotId && sent.playlist && sent.word) {
+    lastSuccessfulSend = {playlist:sent.playlist,word:sent.word};
+    try { localStorage.setItem(LAST_SUCCESS_KEY,JSON.stringify(lastSuccessfulSend)); } catch { /* UI confirmation remains available */ }
+    paintLastSuccessfulWord();
+  }
+  if (remoteKey()) injectStatus(state.active ? 'Monitoramento na Cloudflare, independente desta tela' : 'Monitor remoto conectado, use Iniciar apresentação');
+  updateButton();
+}
+async function readRemoteStatus() {
+  if (remoteReading || remoteBusy || !remoteKey() || document.hidden || !navigator.onLine) return;
+  remoteReading = true;
+  const revision = remoteRevision;
+  try { const state = await remoteRequest('status'); if (revision !== remoteRevision || remoteBusy) return; remoteMessage = ''; applyRemoteStatus(state); }
+  catch (error) { remoteMessage = 'Não foi possível confirmar o monitor: '+error.message+' · A apresentação pode continuar ativa'; paintRemote(); }
+  finally { remoteReading = false; }
+}
+async function startRemote(mode) {
+  if (remoteBusy || sending || playlistBusy || playlistLoading || importingCatalog) return;
+  remoteRevision++;
+  remoteBusy = true; remoteMessage = 'Iniciando monitor remoto'; updateButton();
+  try {
+    const request = {mode,injectId:injectIdInput.value,minutes:mode === 'test' ? 1 : Number($('remote-duration').value)};
+    if (mode === 'live') Object.assign(request,{playlist:data.playlist,catalog:data.catalog,opening:data.opening,auth:auth()});
+    // A test never transmits Spotify credentials or requests playlist changes
+    const state = await remoteRequest('start',request);
+    remoteMessage = ''; applyRemoteStatus(state);
+    toast(mode === 'test' ? 'Teste iniciado por 1 minuto, sem Spotify' : 'Apresentação ativa, você pode bloquear o iPhone');
+  } catch(error) { remoteUnknown = true; remoteMessage = error.message+' · Confira o estado do monitor antes de tentar novamente'; }
+  finally { remoteBusy = false; updateButton(); void readRemoteStatus(); }
+}
+$('remote-start').onclick = () => startRemote('live');
+$('remote-test').onclick = () => startRemote('test');
+$('remote-stop').onclick = async () => {
+  if (remoteBusy) return;
+  remoteRevision++;
+  remoteBusy = true; remoteMessage = 'Encerrando apresentação'; updateButton();
+  try { const state = await remoteRequest('stop',{}); remoteMessage = ''; applyRemoteStatus(state); toast('Monitoramento encerrado'); }
+  catch(error) { remoteMessage = 'Encerramento não confirmado: '+error.message+' · Tente novamente'; }
+  finally { remoteBusy = false; updateButton(); }
+};
+$('remote-pair').onclick = async () => {
+  if (remoteBusy) return;
+  remoteRevision++;
+  const previous = remoteKey();
+  remoteBusy = true;
+  try {
+    saveRemoteKey($('remote-key').value);
+    remoteUnknown = true; updateButton();
+    const state = await remoteRequest('status');
+    $('remote-key').value = ''; remoteMessage = ''; applyRemoteStatus(state); toast('Monitor remoto conectado');
+  } catch(error) {
+    if (previous) localStorage.setItem(REMOTE_KEY_STORAGE,previous); else localStorage.removeItem(REMOTE_KEY_STORAGE);
+    remoteUnknown = !!previous; remoteMessage = error.message;
+  } finally { remoteBusy = false; updateButton(); }
+};
+$('remote-unpair').onclick = async () => {
+  if (remoteBusy) return;
+  remoteRevision++;
+  remoteBusy = true; updateButton();
+  try {
+    await remoteRequest('stop',{});
+    // Adopt a fresh baseline before returning ownership to the existing local receiver
+    const selection = validInjectId(injectIdInput.value) ? await fetchInjectSelection(injectIdInput.value) : null;
+    if (selection) localStorage.setItem('predify.inject.count.v1.'+injectIdInput.value,selection.count);
+    localStorage.removeItem(REMOTE_KEY_STORAGE); remoteState = {active:false}; remoteUnknown = false; remoteMessage = '';
+    injectMonitor.stop(); injectMonitor.setId(''); injectMonitor.setId(injectIdInput.value);
+    toast('Monitor remoto desconectado');
+  } catch(error) { remoteMessage = error.message+' · A conexão remota foi mantida'; }
+  finally { remoteBusy = false; updateButton(); }
+};
+document.addEventListener('visibilitychange',()=>{if (!document.hidden) void readRemoteStatus();});
+window.addEventListener('online',()=>void readRemoteStatus());
+window.addEventListener('storage',event=>{if (event.key === REMOTE_KEY_STORAGE) { remoteRevision++; remoteUnknown = !!remoteKey(); updateButton(); void readRemoteStatus(); }});
+setInterval(()=>void readRemoteStatus(),2500);
+void readRemoteStatus();
 injectIdInput.addEventListener('input', () => {
   const cleaned = injectIdInput.value.replace(/\D/g, '').slice(0, 4);
   injectIdInput.value = cleaned;

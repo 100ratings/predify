@@ -1,4 +1,4 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, letters, spotifyId } from './engine.js?v=1.2.43';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, letters, spotifyId } from './engine.js?v=1.3.0';
 
 function normalized(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')

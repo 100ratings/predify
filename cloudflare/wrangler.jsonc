@@ -1,0 +1,10 @@
+{
+  "name": "predify-inject-lab",
+  "main": "worker.js",
+  "account_id": "f558dc166f20cfef3447b78a368888cd",
+  "compatibility_date": "2026-11-09",
+  "preview_urls": false,
+  "durable_objects": {"bindings": [{"name": "MONITOR", "class_name": "InjectMonitor"},{"name":"PRESENTATION","class_name":"PresentationMonitor"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["InjectMonitor"]},{"tag":"v2","new_sqlite_classes":["PresentationMonitor"]}],
+  "observability": {"enabled": false}
+}

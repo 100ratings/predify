@@ -13,6 +13,13 @@ Keep the 60-second version check while the app is visible and online, check imme
 The Atualizar o app button applies updates without clearing localStorage, credentials or catalog
 Never commit Spotify tokens or Client Secret
 
+Remote presentations use the Cloudflare Worker in cloudflare/, a single authenticated SQLite Durable Object owns each active presentation
+When a remote key is configured, suspend the local Inject receiver, never silently fall back while remote status is unknown
+Remote start snapshots the existing catalog and opening without modifying saved local data, stop must prevent any further polls or new Spotify writes
+Keep test mode strictly read only for Spotify, never send Spotify credentials in test mode
+Remote success requires an accepted Spotify PUT with snapshot_id, persist count deduplication and never automatically retry an ambiguous PUT after a restart
+Keep both Cloudflare secrets and remote pairing keys out of git, tokens must be encrypted before Durable Object storage
+
 The Inject receiver polls every 500 milliseconds only when visible, online, Spotify is connected and a playlist is selected, never overlapping requests, and automatically retries with backoff after errors
 Inject test is read only and a changed counter must never trigger duplicate Spotify PUTs; keep last-success indicator tied to actual Spotify acknowledgment
 

@@ -13,20 +13,27 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://i.scdn.co https://mosaic.scdn.co data:; connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://11z.co; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Predify</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.2.43">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.2.43">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.2.43">
-<link rel="stylesheet" href="style.css?v=1.2.43">
-<script type="module" src="app.js?v=1.2.43"></script>
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.3.0">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.3.0">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.3.0">
+<link rel="stylesheet" href="style.css?v=1.3.0">
+<script type="module" src="app.js?v=1.3.0"></script>
 </head>
 <body>
 <div id="app">
-<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.2.43" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
+<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.3.0" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
 <main id="scroll-area">
 <section id="perform-view" class="view active" aria-labelledby="perform-title">
 <div class="heading"><p class="eyebrow">SUA PRÓXIMA EXPERIÊNCIA</p><h1 id="perform-title">Uma coincidência musical<span class="green">,</span></h1><div class="perform-subline"><p class="subtle">Uma playlist, mais do que parece</p><button id="keep-awake" type="button" class="awake-chip" aria-pressed="false" aria-describedby="keep-awake-status" title="Impedir o bloqueio automático da tela">Ativar tela</button></div><span id="keep-awake-status" class="sr-only" role="status" aria-live="polite">Ative a proteção da tela quando precisar</span></div>
 <div class="workspace">
 <div class="controls">
+<section class="remote-card" aria-labelledby="remote-title">
+<div class="section-heading"><h2 id="remote-title">Apresentação remota</h2><span id="remote-badge" class="count-badge">Cloudflare</span></div>
+<p id="remote-status" class="small subtle" role="status" aria-live="polite">Conecte o monitor remoto em Ajustes para usar com a tela bloqueada</p>
+<div class="remote-options"><label for="remote-duration">Encerrar após<select id="remote-duration"><option value="60">1 hora</option><option value="120" selected>2 horas</option><option value="180">3 horas</option><option value="240">4 horas</option></select></label></div>
+<div class="remote-actions"><button id="remote-start" class="primary" type="button">Iniciar apresentação</button><button id="remote-stop" class="secondary" type="button" disabled>Encerrar apresentação</button></div>
+<p class="small subtle">Usa o catálogo, a abertura e a playlist selecionados ao iniciar</p>
+</section>
 <section class="playlist-card"><div class="playlist-art" id="playlist-art" aria-hidden="true">♫</div><div class="playlist-info"><label for="playlist">PLAYLIST DA APRESENTAÇÃO</label><select id="playlist"><option value="">Conecte o Spotify</option></select><span id="playlist-meta" class="subtle small">Escolha uma playlist criada por você</span></div><button id="reload-playlists" class="icon-button" aria-label="Recarregar playlists" title="Recarregar playlists">↻</button></section>
 <section class="composer"><label for="person-name">Qual é a palavra?</label><input id="person-name" name="predify-revelation-query" type="search" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" placeholder="Ex: Paralelepípedo" maxlength="100"><div class="composer-footer"><span id="name-letters" class="small subtle">Vamos ver onde isso vai dar</span><span id="last-success-word" class="last-success-word" role="status" aria-live="polite" hidden></span></div><button id="update" class="primary" disabled><span>Atualizar playlist</span><span aria-hidden="true">↗</span></button><p class="small subtle update-note">Substitui as músicas da playlist selecionada</p></section>
 <div id="last-send" class="last-send" hidden></div>
@@ -64,6 +71,11 @@
 <div class="inject-row"><input id="inject-id" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="4 dígitos" aria-describedby="inject-status"><button id="inject-test" class="secondary" type="button">Verificar</button></div>
 <p id="inject-status" class="small subtle" role="status" aria-live="polite">Informe seu ID oculto para ativar o Inject</p>
 <p id="inject-test-result" class="small subtle" role="status" aria-live="polite" hidden></p>
+<hr><h3>Monitor remoto</h3>
+<label for="remote-key">Chave de conexão</label>
+<div class="inject-row"><input id="remote-key" type="password" autocomplete="off" placeholder="Cole a chave privada do monitor"><button id="remote-pair" class="secondary" type="button">Conectar</button></div>
+<p class="small subtle">Conectado ao monitor remoto, o Inject será controlado pelos botões de apresentação</p>
+<div class="remote-actions"><button id="remote-test" class="secondary" type="button">Testar por 1 minuto sem Spotify</button><button id="remote-unpair" class="secondary" type="button">Desconectar monitor</button></div>
 </section>
 <section class="settings-card opening-settings"><div class="section-heading"><h2>Abertura fixa</h2><span id="opening-progress" class="count-badge">Não configurada</span></div><p class="subtle small">Repertório independente do catálogo, sem músicas repetidas</p>
 <label for="opening-phrase">Frase</label><input id="opening-phrase" type="text" value="VOCÊ VAI PENSAR EM" maxlength="100">
@@ -81,7 +93,7 @@
 <button id="save-opening" class="primary" hidden disabled>Salvar abertura fixa</button>
 </section>
 <section class="settings-card"><h2>Seu catálogo</h2><p class="subtle">Catálogo e ajustes ficam salvos neste aparelho, exporte uma cópia para guardar ou levar a outro</p><div class="button-row"><button id="export" class="secondary">Exportar catálogo ↓</button><button id="import" class="secondary">Importar catálogo ↑</button><button id="cancel-import" class="secondary" type="button" hidden>Cancelar importação</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><p id="import-status" class="small subtle" role="status" aria-live="polite">Exporte suas escolhas para guardar uma cópia, importe um arquivo de até cinco músicas por letra quando desejar, as sugestões aparecem automaticamente na aba Catálogo</p><p class="small subtle">A cópia não inclui sua conexão nem credenciais do Spotify</p></section>
-<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.2.43</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
+<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.3.0</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
 </div>
 </section>
 </main>

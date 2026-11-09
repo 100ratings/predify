@@ -111,3 +111,8 @@ html,body,body *{touch-action:pan-x pan-y}
 
 /* Calibrated +10 px manual-field offset, only while the iOS keyboard is open */
 .keyboard-open #perform-view.keyboard-manual-offset{transform:translateY(var(--manual-keyboard-offset,0px))}
+
+.remote-card{padding:20px;border:1px solid var(--border,#303630);border-radius:16px;background:var(--surface,#141816)}
+.remote-card h2{font-size:1rem}.remote-card p{margin:12px 0 0;line-height:1.5;overflow-wrap:anywhere}
+.remote-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}.remote-actions button{flex:1;min-width:145px;height:auto;min-height:44px;padding:12px}
+.remote-options{margin-top:14px}.remote-options label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.8rem}.remote-options select{max-width:145px}
