@@ -89,7 +89,19 @@ test('ambiguous Spotify PUT after restart is not retried, new count is sent only
     await restarted.monitor.fetch(request('stop',{}));
     const before=reads;await restarted.monitor.alarm();assert.equal(reads,before);
     assert.equal(restarted.monitor.s.sealedAuth,null);
+    assert.ok(restarted.monitor.s.syncAuth);
+    const sync=await (await restarted.monitor.fetch(request('sync',{}))).json();
+    assert.equal(sync.auth.refresh_token,'private-refresh');
+    assert.equal(restarted.monitor.s.syncAuth,null);
+    assert.equal(restarted.state.alarm,undefined);
   } finally {globalThis.fetch=realFetch;Date.now=realNow;globalThis.setTimeout=realTimer;}
+});
+
+test('encrypted return credentials expire without further Inject requests',async()=>{
+  const sealed=await seal({access_token:'private-access',refresh_token:'private-refresh'},key);
+  const f=fixture({presentation:{active:false,phase:'expired',syncAuth:sealed,syncUntil:Date.now()-1}});
+  await f.ctx.ready;await f.monitor.alarm();assert.equal(f.monitor.s.syncAuth,null);
+  const sync=await (await f.monitor.fetch(request('sync',{}))).json();assert.equal(sync.auth,null);
 });
 
 test('Inject errors back off and stop never starts another poll',async()=>{

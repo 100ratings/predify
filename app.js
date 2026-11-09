@@ -1,21 +1,22 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.0';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.0';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.0';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.0';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.0';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.0';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.0';
-import { preventZoom } from './zoom.js?v=1.3.0';
-import { createKeepAwake } from './keep-awake.js?v=1.3.0';
-import { watchAppUpdates } from './updates.js?v=1.3.0';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.0';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.0';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.0';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.1';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.1';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.1';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.1';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.1';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.1';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.1';
+import { preventZoom } from './zoom.js?v=1.3.1';
+import { createKeepAwake } from './keep-awake.js?v=1.3.1';
+import { watchAppUpdates } from './updates.js?v=1.3.1';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.1';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.1';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.1';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
 let remoteMessage = '';
 let remoteRevision = 0;
+let lastRemoteAuthSync = 0;
 const remoteOwnsPlaylist = () => remoteBusy || remoteUnknown || remoteState.active;
 const $ = id => document.getElementById(id);
 const DATA_KEY = 'predify.data.v1';
@@ -652,7 +653,7 @@ $('disconnect').onclick = async () => {
   if (!confirm('Tem certeza de que deseja desconectar o Spotify deste aparelho?\n\nVocê precisará conectar novamente para atualizar suas playlists\n\nSeu catálogo e sua abertura fixa serão preservados')) return;
   if (remoteKey()) {
     remoteRevision++; remoteBusy = true; updateButton();
-    try { await remoteRequest('stop', {}); remoteState.active = false; remoteUnknown = false; }
+    try { await remoteRequest('stop', {}); await synchronizeRemoteAuth(remoteRevision); remoteState.active = false; remoteUnknown = false; }
     catch (error) { toast('Encerre o monitor remoto antes de desconectar: '+error.message,true); return; }
     finally { remoteBusy = false; updateButton(); }
   }
@@ -741,15 +742,34 @@ async function readRemoteStatus() {
   if (remoteReading || remoteBusy || !remoteKey() || document.hidden || !navigator.onLine) return;
   remoteReading = true;
   const revision = remoteRevision;
-  try { const state = await remoteRequest('status'); if (revision !== remoteRevision || remoteBusy) return; remoteMessage = ''; applyRemoteStatus(state); }
+  try {
+    const state = await remoteRequest('status');
+    if (revision !== remoteRevision || remoteBusy) return;
+    if (state.syncAvailable || state.authUpdatedAt > lastRemoteAuthSync) {
+      await synchronizeRemoteAuth(revision);
+      lastRemoteAuthSync = state.authUpdatedAt || 0;
+    }
+    if (revision !== remoteRevision || remoteBusy) return;
+    remoteMessage = ''; applyRemoteStatus(state);
+  }
   catch (error) { remoteMessage = 'Não foi possível confirmar o monitor: '+error.message+' · A apresentação pode continuar ativa'; paintRemote(); }
   finally { remoteReading = false; }
+}
+async function synchronizeRemoteAuth(revision) {
+  const result = await remoteRequest('sync',{});
+  if (revision !== remoteRevision) return;
+  const next = result.auth;
+  const previous = auth() || {};
+  if (next?.access_token && next?.refresh_token && Number.isFinite(next.expires_at) && next.expires_at >= (previous.expires_at || 0)) {
+    localStorage.setItem('predify.auth.v1',JSON.stringify({...previous,...next,scope:previous.scope || 'playlist-modify-public playlist-modify-private playlist-read-private'}));
+  }
 }
 async function startRemote(mode) {
   if (remoteBusy || sending || playlistBusy || playlistLoading || importingCatalog) return;
   remoteRevision++;
   remoteBusy = true; remoteMessage = 'Iniciando monitor remoto'; updateButton();
   try {
+    if (mode === 'live') await synchronizeRemoteAuth(remoteRevision);
     const request = {mode,injectId:injectIdInput.value,minutes:mode === 'test' ? 1 : Number($('remote-duration').value)};
     if (mode === 'live') Object.assign(request,{playlist:data.playlist,catalog:data.catalog,opening:data.opening,auth:auth()});
     // A test never transmits Spotify credentials or requests playlist changes
@@ -765,7 +785,7 @@ $('remote-stop').onclick = async () => {
   if (remoteBusy) return;
   remoteRevision++;
   remoteBusy = true; remoteMessage = 'Encerrando apresentação'; updateButton();
-  try { const state = await remoteRequest('stop',{}); remoteMessage = ''; applyRemoteStatus(state); toast('Monitoramento encerrado'); }
+  try { const state = await remoteRequest('stop',{}); await synchronizeRemoteAuth(remoteRevision); remoteMessage = ''; applyRemoteStatus(state); toast('Monitoramento encerrado'); }
   catch(error) { remoteMessage = 'Encerramento não confirmado: '+error.message+' · Tente novamente'; }
   finally { remoteBusy = false; updateButton(); }
 };
@@ -790,6 +810,7 @@ $('remote-unpair').onclick = async () => {
   remoteBusy = true; updateButton();
   try {
     await remoteRequest('stop',{});
+    await synchronizeRemoteAuth(remoteRevision);
     // Adopt a fresh baseline before returning ownership to the existing local receiver
     const selection = validInjectId(injectIdInput.value) ? await fetchInjectSelection(injectIdInput.value) : null;
     if (selection) localStorage.setItem('predify.inject.count.v1.'+injectIdInput.value,selection.count);

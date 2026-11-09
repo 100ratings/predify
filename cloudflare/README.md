@@ -9,6 +9,7 @@ O navegador envia uma fotografia do catálogo, abertura e playlist ao iniciar um
 - `POST /api/start`: modo `test` (somente Inject) ou `live` (Spotify), duração entre 1 e 240 minutos
 - `POST /api/stop`: encerra consultas e impede novos envios, uma alteração já aceita pelo Spotify não pode ser desfeita
 - `GET /api/status`: estado e confirmação do último PUT, sem credenciais
+- `POST /api/sync`: devolve os tokens atualizados somente ao aparelho autenticado
 - `GET /health`: disponibilidade da configuração
 - `GET /lab`: métricas anônimas do primeiro teste, sem palavras ou credenciais
 
@@ -18,11 +19,11 @@ As rotas `/api/` exigem `Authorization: Bearer <REMOTE_KEY>`, CORS permite apena
 
 Configure `REMOTE_KEY` (32 bytes aleatórios em base64url) e `TOKEN_ENCRYPTION_KEY` (32 bytes aleatórios em base64) como secrets da Cloudflare, nunca como variáveis públicas ou arquivos versionados
 
-Os tokens Spotify ficam cifrados com AES-256-GCM no armazenamento do Durable Object e só são decifrados em memória durante a apresentação, o encerramento apaga a cópia cifrada da sessão e cancela operações pendentes
+Os tokens Spotify ficam cifrados com AES-256-GCM no armazenamento do Durable Object e só são decifrados em memória durante a apresentação, o encerramento cancela operações pendentes e mantém uma cópia cifrada para sincronização com o aparelho por no máximo uma hora, apagada após a retirada
 
 PKCE permite renovar o token sem Client Secret, nenhuma credencial Spotify é necessária no modo de teste
 
-Se o Spotify rotacionar o refresh token durante uma apresentação, a sessão local anterior pode precisar de uma nova conexão ao Spotify depois do evento, a rotação é persistida com segurança no monitor enquanto a apresentação estiver ativa
+Quando o Spotify rotaciona o refresh token, a versão nova fica cifrada e é sincronizada com o aparelho autenticado ao retornar ou encerrar a apresentação, após uma hora sem recuperar os tokens de uma apresentação encerrada, pode ser necessário conectar o Spotify novamente
 
 O link privado de conexão usa um fragmento `#remote-key=...`, o navegador salva a chave neste aparelho e remove o fragmento do endereço, nunca publique esse link em issues, commits ou logs
 

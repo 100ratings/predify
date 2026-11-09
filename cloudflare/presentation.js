@@ -72,18 +72,23 @@ export class PresentationMonitor extends DurableObject {
     return {active:s.active,phase:s.phase,mode:s.mode,playlist:s.config?.playlist || '',runId:s.runId,startedAt:s.startedAt,endsAt:s.endsAt,
       polls:s.polls || 0,errors:s.errors || 0,changes:s.changes || 0,lastPollAt:s.lastPollAt,lastReadAt:s.lastReadAt,
       lastValue:s.lastValue || '',lastSuccess:s.lastSuccess || null,lastError:s.lastError || s.injectError || '',pending:!!s.pending,
-      intervalMs:stats(s.intervals || []),fetchMs:stats(s.latencies || []),serverNow:Date.now(),dailyAttempts:this.budgetToday().attempts};
+      intervalMs:stats(s.intervals || []),fetchMs:stats(s.latencies || []),serverNow:Date.now(),dailyAttempts:this.budgetToday().attempts,authUpdatedAt:s.authUpdatedAt || 0,syncAvailable:!!s.syncAuth && s.syncUntil > Date.now()};
   }
   async finish(reason) {
     this.stopVersion++;
     this.s.active = false;
     this.s.phase = reason;
     this.s.pending = null;
+    if (this.s.sealedAuth) {
+      this.s.syncAuth = this.s.sealedAuth;
+      this.s.syncUntil = Date.now()+3600000;
+    }
     this.s.sealedAuth = null;
     this.token = null;
     this.abort?.abort();
     this.spotifyAbort?.abort();
-    await this.ctx.storage.deleteAlarm();
+    if (this.s.syncAuth) await this.ctx.storage.setAlarm(this.s.syncUntil);
+    else await this.ctx.storage.deleteAlarm();
     await this.save();
   }
   async fetch(req) {
@@ -109,6 +114,11 @@ export class PresentationMonitor extends DurableObject {
         await this.ctx.storage.setAlarm(Date.now()+1);
       } else if (path === '/api/stop' && req.method === 'POST') {
         await this.finish('stopped');
+      } else if (path === '/api/sync' && req.method === 'POST') {
+        const sealed = this.s.active ? this.s.sealedAuth : this.s.syncUntil > Date.now() ? this.s.syncAuth : null;
+        const auth = sealed ? await unseal(sealed,this.env.TOKEN_ENCRYPTION_KEY) : null;
+        if (!this.s.active) { this.s.syncAuth = null; await this.save(); await this.ctx.storage.deleteAlarm(); }
+        return Response.json({auth});
       } else if (path !== '/api/status' || req.method !== 'GET') return Response.json({error:'Rota inválida'},{status:404});
       return Response.json(this.status());
     } catch (e) { return Response.json({error:e.message},{status:400}); }
@@ -125,6 +135,7 @@ export class PresentationMonitor extends DurableObject {
     if (!res.ok || !data.access_token) throw new Error('O Spotify precisa de uma nova conexão');
     this.token = {access_token:data.access_token,refresh_token:data.refresh_token || this.token.refresh_token,expires_at:Date.now()+data.expires_in*1000};
     this.s.sealedAuth = await seal(this.token,this.env.TOKEN_ENCRYPTION_KEY);
+    this.s.authUpdatedAt = Date.now();
     await this.save();
     return this.token.access_token;
   }
@@ -170,7 +181,14 @@ export class PresentationMonitor extends DurableObject {
     this.ctx.waitUntil(this.delivery);
   }
   async alarm() {
-    if (this.running || !this.s.active) return;
+    if (!this.s.active) {
+      if (this.s.syncAuth) {
+        if (Date.now() >= this.s.syncUntil) { this.s.syncAuth = null; await this.save(); }
+        else await this.ctx.storage.setAlarm(this.s.syncUntil);
+      }
+      return;
+    }
+    if (this.running) return;
     if (Date.now() >= this.s.endsAt) return this.finish('expired');
     this.running = true;
     const runId = this.s.runId;
@@ -215,7 +233,7 @@ export class PresentationMonitor extends DurableObject {
       this.running = false;
       if (this.s.runId === runId) {
         if (Date.now() >= this.s.endsAt && this.s.active) await this.finish('expired');
-        else { await this.save(); if (this.s.active) await this.ctx.storage.setAlarm(Date.now()+1); else await this.ctx.storage.deleteAlarm(); }
+        else { await this.save(); if (this.s.active) await this.ctx.storage.setAlarm(Date.now()+1); else if (this.s.syncAuth) await this.ctx.storage.setAlarm(this.s.syncUntil); else await this.ctx.storage.deleteAlarm(); }
       }
     }
   }
