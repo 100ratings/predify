@@ -1,4 +1,4 @@
-const CACHE = 'predify-shell-1.3.2-20261109231857357';
+const CACHE = 'predify-shell-1.3.3-20261109233010118';
 const FILES = ['./', './index.html', './style.css', './app.js', './engine.js', './catalog-search.js', './catalog-import.js', './catalog-actions.js', './inject.js', './remote.js', './keep-awake.js', './playlist-cover.js', './viewport.js', './zoom.js', './updates.js', './version.js', './spotify.js', './suggestions.js', './manifest.webmanifest', './icons/icon.svg', './icons/favicon-32x32.png', './icons/favicon-16x16.png', './icons/aleatoriedades-demian.webp', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(path => new Request(new URL(path, self.registration.scope), { cache: 'reload' })))).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('predify-shell-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));

@@ -1,16 +1,16 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.2';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.2';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.2';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.2';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.2';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.2';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.2';
-import { preventZoom } from './zoom.js?v=1.3.2';
-import { createKeepAwake } from './keep-awake.js?v=1.3.2';
-import { watchAppUpdates } from './updates.js?v=1.3.2';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.2';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.2';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.2';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.3';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.3';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.3';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.3';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.3';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.3';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.3';
+import { preventZoom } from './zoom.js?v=1.3.3';
+import { createKeepAwake } from './keep-awake.js?v=1.3.3';
+import { watchAppUpdates } from './updates.js?v=1.3.3';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.3';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.3';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.3';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -719,10 +719,11 @@ function paintRemote() {
   if (remoteState.active) {
     const until = new Date(remoteState.endsAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     message = (remoteState.mode === 'test' ? 'Teste sem Spotify' : 'Apresentação ativa')+' até '+until+' · '+remoteState.polls+' leituras';
-    if (remoteState.lastValue) message += ' · Última recebida: '+remoteState.lastValue;
   } else if (remoteState.phase === 'expired') message = 'Apresentação encerrada automaticamente';
   else if (remoteState.phase === 'stopped') message = 'Apresentação encerrada';
   else if (remoteState.phase === 'daily-limit') message = 'Monitor encerrado pelo limite diário de segurança';
+  if (remoteState.lastValue) message += ' · Última recebida: '+remoteState.lastValue;
+  else if (remoteState.mode === 'test' && !remoteState.active && ['expired','stopped'].includes(remoteState.phase)) message += ' · Nenhuma palavra nova recebida neste teste';
   if (remoteState.lastError) message += ' · '+remoteState.lastError;
   $('remote-status').textContent = remoteMessage || message;
 }
