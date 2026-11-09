@@ -1,5 +1,5 @@
-import { MAX_TRACKS_PER_LETTER, letters, cleanTrack } from './engine.js?v=1.3.3';
-import { candidateScore } from './catalog-import.js?v=1.3.3';
+import { MAX_TRACKS_PER_LETTER, letters, cleanTrack } from './engine.js?v=1.3.4';
+import { candidateScore } from './catalog-import.js?v=1.3.4';
 
 export function sameSong(first, second) {
   if (!first || !second) return false;

@@ -1,16 +1,16 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.3';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.3';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.3';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.3';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.3';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.3';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.3';
-import { preventZoom } from './zoom.js?v=1.3.3';
-import { createKeepAwake } from './keep-awake.js?v=1.3.3';
-import { watchAppUpdates } from './updates.js?v=1.3.3';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.3';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.3';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.3';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.4';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.4';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.4';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.4';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.4';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.4';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.4';
+import { preventZoom } from './zoom.js?v=1.3.4';
+import { createKeepAwake } from './keep-awake.js?v=1.3.4';
+import { watchAppUpdates } from './updates.js?v=1.3.4';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.4';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.4';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.4';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -674,6 +674,16 @@ $('person-name').addEventListener('keydown', event => {
   $('person-name').blur();
 });
 const injectIdInput = $('inject-id');
+const remoteDurationInput = $('remote-duration');
+const REMOTE_DURATION_KEY = 'predify.remote.duration.v1';
+try {
+  const savedDuration = localStorage.getItem(REMOTE_DURATION_KEY);
+  if (['60','120','180','240'].includes(savedDuration)) remoteDurationInput.value = savedDuration;
+} catch { /* Keep the default if this browser cannot read preferences */ }
+remoteDurationInput.addEventListener('change', () => {
+  try { localStorage.setItem(REMOTE_DURATION_KEY, remoteDurationInput.value); }
+  catch { toast('Não foi possível salvar a duração neste aparelho', true); }
+});
 try { injectIdInput.value = localStorage.getItem(INJECT_ID_KEY) || ''; } catch { injectIdInput.value = ''; }
 const injectStatus = (message, error = false) => {
   $('inject-status').textContent = message;
