@@ -116,3 +116,6 @@ html,body,body *{touch-action:pan-x pan-y}
 .remote-card h2{font-size:1rem}.remote-card p{margin:12px 0 0;line-height:1.5;overflow-wrap:anywhere}
 .remote-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}.remote-actions button{flex:1;min-width:145px;height:auto;min-height:44px;padding:12px}
 .remote-options{margin-top:14px}.remote-options label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.8rem}.remote-options select{max-width:145px}
+
+/* Match the presentation controls while retaining the stop action color */
+#remote-start,#remote-stop{border-radius:30px;justify-content:center;font-size:15px;font-weight:750}

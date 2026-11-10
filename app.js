@@ -1,16 +1,15 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.5';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.5';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.5';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.5';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.5';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.5';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.5';
-import { preventZoom } from './zoom.js?v=1.3.5';
-import { createKeepAwake } from './keep-awake.js?v=1.3.5';
-import { watchAppUpdates } from './updates.js?v=1.3.5';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.5';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.5';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.5';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.6';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.6';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.6';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.6';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.6';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.6';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.6';
+import { preventZoom } from './zoom.js?v=1.3.6';
+import { watchAppUpdates } from './updates.js?v=1.3.6';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.6';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.6';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.6';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -21,42 +20,8 @@ const remoteOwnsPlaylist = () => remoteBusy || remoteUnknown || remoteState.acti
 const $ = id => document.getElementById(id);
 const DATA_KEY = 'predify.data.v1';
 const LAST_SUCCESS_KEY = 'predify.last-success.v1';
-const keepAwake = createKeepAwake({
-  onState: ({ status, enabled }) => {
-    const button = $('keep-awake');
-    const label = $('keep-awake-status');
-    const active = status === 'active';
-    button.setAttribute('aria-pressed', String(active));
-    button.classList.toggle('awake-active', active);
-    button.textContent = active ? '✓ Tela ativa' : 'Ativar tela';
-    button.title = active ? 'Toque para permitir o bloqueio automático novamente' : 'Toque para impedir o bloqueio automático';
-    button.setAttribute('aria-label', active ? 'Desativar proteção da tela' : 'Ativar proteção da tela');
-    label.classList.toggle('awake-success', status === 'active');
-    label.classList.toggle('awake-error', ['interrupted', 'error', 'unsupported'].includes(status));
-    if (status === 'active') label.textContent = '✓ Tela protegida contra bloqueio automático';
-    else if (status === 'requesting') label.textContent = 'Ativando proteção da tela…';
-    else if (status === 'paused') label.textContent = 'Pausado, será reativado quando você voltar ao Predify';
-    else if (status === 'interrupted') label.textContent = 'Preferência salva, toque normalmente no app para reativar a proteção';
-    else if (status === 'unsupported') label.textContent = 'Este navegador não oferece proteção da tela';
-    else if (status === 'error') label.textContent = 'Preferência salva, toque normalmente no app para tentar reativar';
-    else label.textContent = 'A tela poderá bloquear normalmente';
-  }
-});
-$('keep-awake').onclick = () => {
-  // When the saved preference is on but Safari denied auto-wake on launch,
-  // this tap must retry acquiring the lock, not turn the preference off
-  const state = keepAwake.snapshot();
-  if (state.active) keepAwake.disable();
-  else if (state.enabled) void keepAwake.retryOnInteraction();
-  else void keepAwake.enable();
-};
-// On iPhone, the saved choice may need user activation after a new app launch
-// Reuse the next ordinary tap anywhere; do not hijack the wake preference button
-document.addEventListener('click', event => {
-  if (event.isTrusted && !event.target?.closest?.('#keep-awake')) {
-    void keepAwake.retryOnInteraction();
-  }
-}, true);
+// Screen wake-lock implementation is retained in keep-awake.js for future use
+// No wake lock is requested while its control is removed from the interface
 
 function loadLastSuccess() {
   try {
@@ -999,11 +964,10 @@ document.addEventListener('focusin', applyViewport);
 document.addEventListener('focusout', () => setTimeout(applyViewport, 80));
 window.addEventListener('orientationchange', () => setTimeout(applyViewport, 300));
 window.addEventListener('pageshow', () => {
-  keepAwake.onVisibilityChange();
   // iOS can restore an interrupted OAuth attempt with a disabled connect button
   if (!auth()) { $('connect').disabled = false; paintAccount(); }
 });
-document.addEventListener('visibilitychange', () => { applyViewport(); keepAwake.onVisibilityChange(); if (!document.hidden) { paintAccount(); injectMonitor.resume(); } });
+document.addEventListener('visibilitychange', () => { applyViewport(); if (!document.hidden) { paintAccount(); injectMonitor.resume(); } });
 window.addEventListener('online', () => injectMonitor.resume());
 window.addEventListener('scroll', () => { if (window.scrollY) window.scrollTo(0, 0); }, { passive: true });
 window.addEventListener('storage', event => { if (event.key === DATA_KEY) { data = loadData(); openingPosition = null; paintCatalog(); paintOpeningSummary(); renderPreview(); } if (event.key === LAST_SUCCESS_KEY) { lastSuccessfulSend = loadLastSuccess(); paintLastSuccessfulWord(); } if (event.key === 'predify.auth.v1') { paintAccount(); if (auth()) loadPlaylists(); } });
@@ -1201,9 +1165,6 @@ async function start() {
     canReload: () => !sending && !playlistBusy && !importingCatalog,
     notify: message => toast(message, true)
   });
-  // Reapply the user's saved keep-awake choice on each launch
-  // iOS may deny activation without interaction, so status must show the real result
-  void keepAwake.restore();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
   paintCatalog(); paintOpeningSummary(); renderPreview(); paintAccount();
   const initialView = location.hash.slice(1);

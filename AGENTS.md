@@ -25,15 +25,10 @@ Inject test is read only and a changed counter must never trigger duplicate Spot
 
 The Inject auto-send path never reads or writes the manual word input, never clicks its submit button and does not render the manual preview, but builds from Inject value directly and PUTs to Spotify
 
-The manual Keep Screen Awake control uses the native Screen Wake Lock API, never loops audio/video, never alters Inject polling, requires user opt-in and shows real activation status, releases when app is hidden and reacquires when visible
-
-Keep the compact wake-lock chip on the Performar view beside the subtitle, not in Settings, and when the preference is saved but lock is inactive a tap must retry rather than disable it
-
-The screen wake-lock preference is saved in localStorage under predify.keep-awake.v1 and automatically retried at startup, while real lock activation remains subject to iOS granting the Screen Wake Lock API request
-Only explicit disabling removes the saved preference; a temporary OS rejection must not silently forget the user's choice
-
-If iOS denies an automatic wake lock request, do not discard the saved user preference or falsely mark the screen as protected
-Retry synchronously in the next trusted ordinary click, excluding the Settings wake toggle, and never use a timer or polling loop to force iOS wake lock
+The wake-lock button is removed from the interface, keep keep-awake.js and its module tests for possible future use
+Do not initialize or request wake locks automatically, including on startup, ordinary taps, pageshow or visibility changes
+Preserve any previously saved wake-lock preference without activating it
+The presentation start and stop buttons share the same rounded shape and typography, retaining distinct action colors and their existing enabled/disabled conditions
 
 When the iOS keyboard opens while the manual word input is focused, scroll only the inner scroll-area far enough to show the entire composer and Atualizar playlist button above the keyboard
 Never apply this adjustment to other input fields, desktop views, the Inject auto-send path, or the non-keyboard layout

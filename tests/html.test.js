@@ -196,24 +196,13 @@ test('Inject checks immediately after returning to foreground or reconnecting', 
   assert.match(app,/window\.addEventListener\('online', \(\) => injectMonitor\.resume\(\)\)/);
 });
 
-test('wake-lock chip appears beside the performance subtitle, not in Settings', () => {
+test('wake-lock control is absent and its implementation remains dormant', () => {
   const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-  const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
-  const perform = html.slice(html.indexOf('id="perform-view"'), html.indexOf('id="catalog-view"'));
-  const settings = html.slice(html.indexOf('id="settings-view"'));
-  assert.match(perform, /class="perform-subline"/);
-  assert.match(perform, /id="keep-awake"[^>]*>Ativar tela<\/button>/);
-  assert.match(perform, /id="keep-awake-status"/);
-  assert.doesNotMatch(settings, /id="keep-awake"|class="settings-card awake-card"/);
-  assert.equal(html.split('id="keep-awake"').length - 1, 1);
-  assert.match(css, /\.awake-chip\.awake-active/);
-  assert.match(app, /const state = keepAwake\.snapshot\(\)/);
-  assert.match(app, /if \(state\.active\) keepAwake\.disable\(\)/);
-  assert.match(app, /else if \(state\.enabled\) void keepAwake\.retryOnInteraction\(\)/);
-  assert.match(app, /else void keepAwake\.enable\(\)/);
-  assert.match(app, /keepAwake\.onVisibilityChange\(\)/);
-  assert.match(sw, /'\.\/keep-awake\.js'/);
+  const wake = readFileSync(new URL('../keep-awake.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /id="keep-awake(?:-status)?"/);
+  assert.doesNotMatch(app, /import .*createKeepAwake|keepAwake\.(restore|enable|retryOnInteraction|onVisibilityChange)\(/);
+  assert.ok(wake.includes("KEEP_AWAKE_KEY = 'predify.keep-awake.v1'"));
+  assert.match(wake, /const retryOnInteraction = \(\) =>/);
 });
 
 test('bottom navigation labels are Performar, Catálogo and Ajustes without changing actions', () => {
@@ -223,26 +212,6 @@ test('bottom navigation labels are Performar, Catálogo and Ajustes without chan
   assert.match(page, /data-view="settings"[^>]*[\s\S]*?<span>Ajustes<\/span><\/button>/);
 });
 
-
-test('saved wake lock setting is restored during startup without changing other workflows', () => {
-  const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-  const wake = readFileSync(new URL('../keep-awake.js', import.meta.url), 'utf8');
-  assert.ok(wake.includes("KEEP_AWAKE_KEY = 'predify.keep-awake.v1'"));
-  assert.ok(wake.includes("storage?.setItem(KEEP_AWAKE_KEY, 'true')"));
-  assert.ok(wake.includes("storage?.removeItem(KEEP_AWAKE_KEY)"));
-  assert.ok(wake.includes('const restore = () =>'));
-  const startup = app.slice(app.indexOf('async function start() {'));
-  assert.ok(startup.includes('void keepAwake.restore()'));
-});
-
-test('saved wake protection retries on a trusted ordinary tap, not on the disable button', () => {
-  const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-  assert.match(app, /event\.isTrusted && !event\.target\?\.closest\?\.\('#keep-awake'\)/);
-  assert.match(app, /void keepAwake\.retryOnInteraction\(\)/);
-  assert.match(app, /keepAwake\.onVisibilityChange\(\)/);
-  const wake = readFileSync(new URL('../keep-awake.js', import.meta.url), 'utf8');
-  assert.match(wake, /const retryOnInteraction = \(\) =>/);
-});
 
 test('manual word keyboard reveals the full composer without moving other editors', () => {
   const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
