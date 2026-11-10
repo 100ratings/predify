@@ -1,4 +1,4 @@
-import { recordDiagnostic } from './diagnostics.js?v=1.3.10';
+import { recordDiagnostic, diagnosticFetch, updateRemoteDiagnostics } from './diagnostics.js?v=1.3.11';
 let lastDiagnosticState = '';
 export const REMOTE_URL = 'https://predify-inject-lab.omentalistademian.workers.dev';
 export const REMOTE_KEY_STORAGE = 'predify.remote.key.v1';
@@ -23,13 +23,14 @@ export async function remoteRequest(action, body) {
   const key = remoteKey();
   if (!key) throw new Error('Conecte o monitor remoto em Ajustes');
   const started = Date.now();
-  const res = await fetch(REMOTE_URL+'/api/'+action,{
+  const res = await diagnosticFetch('cloudflare-control',action,REMOTE_URL+'/api/'+action,{
     method:body === undefined ? 'GET' : 'POST', cache:'no-store',credentials:'omit',
     headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
     ...(body === undefined ? {} : {body:JSON.stringify(body)}),signal:AbortSignal.timeout(12000)
   }).catch(error => { recordDiagnostic('remote-network-error',{operation:action,ms:Date.now()-started}); throw error; });
   if (action !== 'status' || !res.ok) recordDiagnostic('remote-response',{operation:action,status:res.status,ms:Date.now()-started});
   const data = await res.json();
+  if (data.diagnostics) updateRemoteDiagnostics(data.diagnostics);
   if (res.ok && action === 'status') {
     const state = {active:!!data.active,hasError:!!data.lastError,errors:Number(data.errors)||0,changes:Number(data.changes)||0};
     const fingerprint = JSON.stringify(state);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../cloudflare/presentation.js',import.meta.url),'utf8')
   .replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject { constructor(ctx,env) { this.ctx=ctx; this.env=env; } }')
+  .replace("'../request-metrics.js'",JSON.stringify(new URL('../request-metrics.js',import.meta.url).href))
   .replace("'../engine.js'",JSON.stringify(new URL('../engine.js',import.meta.url).href))
   .replace("'../inject.js'",JSON.stringify(new URL('../inject.js',import.meta.url).href));
 const {PresentationMonitor,validateStart,seal,unseal} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
@@ -148,4 +149,24 @@ test('Spotify Retry-After applies to newer Inject counts too',async()=>{
     assert.ok(f.monitor.s.spotifyRetryAt>time);
     await f.monitor.fetch(request('stop',{}));
   } finally {globalThis.fetch=realFetch;Date.now=realNow;globalThis.setTimeout=realTimer;}
+});
+
+test('remote accounting counts retries and token calls separately, persists without exposing tokens or words',async()=>{
+ const f=fixture();await f.ctx.ready;
+ f.monitor.s={active:true,runId:crypto.randomUUID(),startedAt:Date.now(),mode:'live',config:{diagnosticTestId:crypto.randomUUID()}};
+ const original=globalThis.fetch;
+ let n=0;
+ globalThis.fetch=async()=>Response.json({}, {status:++n===1?401:200});
+ try{
+  await f.monitor.trackedFetch('spotify','playlist-items','https://example.test',{method:'PUT'},20);
+  await f.monitor.trackedFetch('spotify-auth','token','https://example.test',{method:'POST'});
+  await f.monitor.trackedFetch('spotify','playlist-items','https://example.test',{method:'PUT'},20);
+  const restarted=fixture(f.state);await restarted.ctx.ready;
+  const diag=restarted.monitor.status().diagnostics;
+  assert.equal(diag.totals['spotify|playlist-items|PUT'].attempts,2);
+  assert.equal(diag.totals['spotify-auth|token|POST'].attempts,1);
+  assert.equal(diag.totals['spotify|playlist-items|PUT'].statuses[401],1);
+  assert.equal(diag.runs[0].testId,f.monitor.s.config.diagnosticTestId);
+  assert.equal(JSON.stringify(diag).includes('access_token'),false);
+ }finally{globalThis.fetch=original;}
 });

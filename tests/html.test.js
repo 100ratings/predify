@@ -174,7 +174,7 @@ test('Inject has only a four-digit ID field and read-only test action between Sp
   assert.match(html,/class="count-badge">500 ms/);
   assert.match(html,/id="inject-test-result"/);
   assert.match(app,/createInjectMonitor\(\{/);
-  assert.match(app,/await fetchInjectSelection\(id\)/);
+  assert.match(app,/await fetchInjectSelection\(id,\{fetcher:/);
   const direct = app.slice(app.indexOf('  onSelection: async event => {'), app.indexOf('  onStatus: event => {'));
   assert.match(direct, /buildSequence\(\{ name: event\.value, catalog: data\.catalog, opening: data\.opening \}\)/);
   assert.match(direct, /sendSequenceToSpotify\(event\.value, directSequence\.tracks, \{ inject: true \}\)/);

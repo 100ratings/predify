@@ -1,7 +1,7 @@
-import { recordDiagnostic, spotifyOperation } from './diagnostics.js?v=1.3.10';
-import { spotifyId, cleanTrack } from './engine.js?v=1.3.10';
-import { candidateScore } from './catalog-import.js?v=1.3.10';
-import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.10';
+import { recordDiagnostic, spotifyOperation, diagnosticFetch } from './diagnostics.js?v=1.3.11';
+import { spotifyId, cleanTrack } from './engine.js?v=1.3.11';
+import { candidateScore } from './catalog-import.js?v=1.3.11';
+import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.11';
 export const CLIENT_ID = 'ea812e9b0ada47778150c48b62bf02ee';
 export const SCOPES = ['playlist-modify-public', 'playlist-modify-private', 'playlist-read-private'];
 const KEY = 'predify.auth.v1';
@@ -16,7 +16,7 @@ function saveAuth(data, previous = {}) {
   return saved;
 }
 async function tokenRequest(body) {
-  const response = await fetch('https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body), signal: timeoutSignal() });
+  const response = await diagnosticFetch('spotify-auth','token','https://accounts.spotify.com/api/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body), signal: timeoutSignal() });
   const result = await response.json();
   if (!response.ok) {
     if (result.error === 'invalid_grant') {
@@ -82,22 +82,17 @@ export async function api(path, options = {}, retry = true) {
   if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Caminho da API inválido');
   const cooldown = spotifyCooldown();
   if (cooldown.until > Date.now()) {
-    recordDiagnostic('spotify-wait',{operation:spotifyOperation(path),retryAfter:Math.ceil((cooldown.until-Date.now())/1000),reason:cooldown.reason,reported:cooldown.reported});
+    recordDiagnostic('cooldown-blocked',{operation:spotifyOperation(path),retryAfter:Math.ceil((cooldown.until-Date.now())/1000),reason:cooldown.reason,reported:cooldown.reported});
     throw cooldownError(cooldown);
   }
   const token = await accessToken();
   const currentCooldown = spotifyCooldown();
-  if (currentCooldown.until > Date.now()) throw cooldownError(currentCooldown);
-  const started = Date.now();
+  if (currentCooldown.until > Date.now()) {recordDiagnostic('cooldown-blocked',{operation:spotifyOperation(path)});throw cooldownError(currentCooldown);}
   const method = options.method || 'GET';
-  let response;
-  try {
-    response = await fetch('https://api.spotify.com/v1' + path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: timeoutSignal() });
-  } catch (error) {
-    recordDiagnostic('spotify-network-error',{operation:spotifyOperation(path),method,ms:Date.now()-started});
-    throw error;
-  }
-  recordDiagnostic('spotify-response',{operation:spotifyOperation(path),method,status:response.status,ms:Date.now()-started});
+  let itemCount = 0;
+  try { itemCount = JSON.parse(options.body || '{}').uris?.length || 0; } catch { /* Never log request bodies */ }
+  const response = await diagnosticFetch('spotify',spotifyOperation(path),'https://api.spotify.com/v1' + path,
+    { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: timeoutSignal() },itemCount);
   if (response.status === 401 && retry) { await accessToken(true); return api(path, options, false); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {

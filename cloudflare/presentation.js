@@ -1,3 +1,4 @@
+import { metricKey,metricDay,countAttempt,countResult } from '../request-metrics.js';
 import { DurableObject } from 'cloudflare:workers';
 import { buildSequence, validateCatalog, validateOpening, openingConflicts } from '../engine.js';
 import { fetchInjectSelection } from '../inject.js';
@@ -27,7 +28,7 @@ export function validateStart(input) {
   if (!['test','live'].includes(input.mode)) throw new Error('Modo inválido');
   const minutes = Number(input.minutes ?? 120);
   if (!Number.isFinite(minutes) || minutes < 1 || minutes > 240) throw new Error('Use entre 1 e 240 minutos');
-  const out = {injectId:input.injectId,mode:input.mode,durationMs:Math.min(MAX_MS,minutes*60000)};
+  const out = {injectId:input.injectId,mode:input.mode,durationMs:Math.min(MAX_MS,minutes*60000),diagnosticTestId:typeof input.diagnosticTestId==='string'&&/^[a-f0-9-]{8,64}$/.test(input.diagnosticTestId)?input.diagnosticTestId:null};
   if (input.mode === 'live') {
     if (!/^[A-Za-z0-9]{22}$/.test(input.playlist || '')) throw new Error('Selecione uma playlist');
     if (!input.auth?.refresh_token || !input.auth?.access_token || !Number.isFinite(input.auth.expires_at)) throw new Error('Conecte novamente o Spotify');
@@ -53,6 +54,9 @@ export class PresentationMonitor extends DurableObject {
     ctx.blockConcurrencyWhile(async () => {
       this.s = await ctx.storage.get('presentation') || {active:false,phase:'idle'};
       this.budget = await ctx.storage.get('budget') || {day:'',attempts:0,activeMs:0};
+      this.diag = await ctx.storage.get('diagnostics') || {schema:1,since:Date.now(),totals:{},days:{},runs:[]};
+      if ((this.diag.pollCheckpointOpen || this.diag.spotifyCheckpointOpen) && this.s.runId) this.metricRun().possibleGap=true;
+      this.diag.pollCheckpointOpen=false; this.diag.spotifyCheckpointOpen=false;
       // A PUT interrupted by a restart has an unknown outcome, never repeat it automatically
       if (this.s.pending?.phase === 'sending') {
         this.s.lastError = 'Envio interrompido, confira a playlist antes de repetir';
@@ -61,7 +65,24 @@ export class PresentationMonitor extends DurableObject {
       }
     });
   }
-  save() { return this.ctx.storage.put({presentation:this.s,budget:this.budget}); }
+  save() { return this.ctx.storage.put({presentation:this.s,budget:this.budget,diagnostics:this.diag}); }
+  metricRun() {
+    let run=this.diag.runs.find(r=>r.id===this.s.runId);
+    if(!run){run={id:this.s.runId,startedAt:this.s.startedAt||Date.now(),endedAt:0,testId:this.s.config?.diagnosticTestId||null,mode:this.s.mode||'test',possibleGap:false,metrics:{}};this.diag.runs.push(run);this.diag.runs=this.diag.runs.slice(-20);}
+    return run;
+  }
+  async trackedFetch(service,operation,url,options,items=0) {
+    const start=Date.now(),day=metricDay(start),key=metricKey(service,operation,options.method||'GET');
+    const run=this.metricRun();
+    const groups=[this.diag.totals,this.diag.days[day] ||= {},run.metrics];
+    for(const m of groups)countAttempt(m,key,items);
+    for(const old of Object.keys(this.diag.days).sort().slice(0,-14))delete this.diag.days[old];
+    // Spotify attempts are checkpointed before transmission, never store credentials in metrics
+    if(service!=='inject'){this.diag.spotifyCheckpointOpen=true;await this.save();}
+    try{const response=await fetch(url,options);for(const m of groups)countResult(m,key,response.status,Date.now()-start);return response;}
+    catch(error){for(const m of groups)countResult(m,key,null,Date.now()-start);throw error;}
+    finally{if(service!=='inject'){this.diag.spotifyCheckpointOpen=false;await this.save();}}
+  }
   budgetToday() {
     const day = new Date().toISOString().slice(0,10);
     if (this.budget.day !== day) this.budget = {day,attempts:0,activeMs:0};
@@ -69,7 +90,7 @@ export class PresentationMonitor extends DurableObject {
   }
   status() {
     const s = this.s;
-    return {active:s.active,phase:s.phase,mode:s.mode,playlist:s.config?.playlist || '',runId:s.runId,startedAt:s.startedAt,endsAt:s.endsAt,
+    return {diagnostics:this.diag,active:s.active,phase:s.phase,mode:s.mode,playlist:s.config?.playlist || '',runId:s.runId,startedAt:s.startedAt,endsAt:s.endsAt,
       polls:s.polls || 0,errors:s.errors || 0,changes:s.changes || 0,lastPollAt:s.lastPollAt,lastReadAt:s.lastReadAt,
       lastValue:s.lastValue || '',lastSuccess:s.lastSuccess || null,lastError:s.lastError || s.injectError || '',pending:!!s.pending,
       intervalMs:stats(s.intervals || []),fetchMs:stats(s.latencies || []),serverNow:Date.now(),dailyAttempts:this.budgetToday().attempts,authUpdatedAt:s.authUpdatedAt || 0,syncAvailable:!!s.syncAuth && s.syncUntil > Date.now()};
@@ -78,6 +99,7 @@ export class PresentationMonitor extends DurableObject {
     this.stopVersion++;
     this.s.active = false;
     this.s.phase = reason;
+    if(this.s.runId)this.metricRun().endedAt=Date.now();
     this.s.pending = null;
     if (this.s.sealedAuth) {
       this.s.syncAuth = this.s.sealedAuth;
@@ -110,6 +132,7 @@ export class PresentationMonitor extends DurableObject {
         this.s = {active:true,phase:'monitoring',runId:crypto.randomUUID(),config,mode:config.mode,sealedAuth,
           startedAt:Date.now(),endsAt:Date.now()+config.durationMs,polls:0,errors:0,changes:0,
           intervals:[],latencies:[],seenCount:null,pending:null,lastValue:'',lastError:'',lastSuccess:null,errorStreak:0,nextPollAt:0};
+        this.metricRun();
         await this.save();
         await this.ctx.storage.setAlarm(Date.now()+1);
       } else if (path === '/api/stop' && req.method === 'POST') {
@@ -128,7 +151,7 @@ export class PresentationMonitor extends DurableObject {
     const runId = this.s.runId;
     if (!this.token) this.token = await unseal(this.s.sealedAuth,this.env.TOKEN_ENCRYPTION_KEY);
     if (!force && this.token.expires_at > Date.now()+60000) return this.token.access_token;
-    const res = await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    const res = await this.trackedFetch('spotify-auth','token','https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({grant_type:'refresh_token',refresh_token:this.token.refresh_token,client_id:CLIENT_ID}),signal:AbortSignal.timeout(7000)});
     const data = await res.json();
     if (!this.s.active || this.s.runId !== runId) throw new Error('Apresentação encerrada');
@@ -156,14 +179,16 @@ export class PresentationMonitor extends DurableObject {
         event.phase = 'sending';
         await this.save();
         this.spotifyAbort = new AbortController();
-        const put = token => fetch('https://api.spotify.com/v1/playlists/'+this.s.config.playlist+'/items',{
+        const put = token => this.trackedFetch('spotify','playlist-items','https://api.spotify.com/v1/playlists/'+this.s.config.playlist+'/items',{
           method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-          body:JSON.stringify({uris:result.tracks.map(t=>t.uri)}),signal:AbortSignal.any([this.spotifyAbort.signal,AbortSignal.timeout(7000)])});
+          body:JSON.stringify({uris:result.tracks.map(t=>t.uri)}),signal:AbortSignal.any([this.spotifyAbort.signal,AbortSignal.timeout(7000)])},result.tracks.length);
         let res = await put(access);
         if (res.status === 401 && this.s.active) { access = await this.refreshToken(true); if (this.s.active) res = await put(access); }
         const body = await res.json().catch(()=>({}));
         if (!this.s.active || this.s.runId !== runId) return;
         if (res.status === 429) {
+          const after=res.headers.get('Retry-After');
+          this.diag.lastSpotifyLimit={at:Date.now(),reason:body.error?.reason==='QUOTA_EXCEEDED'?'QUOTA_EXCEEDED':'',retryAfter:after!==null&&Number.isFinite(Number(after))?Number(after):null};
           event.phase = 'queued'; event.retryAt = Date.now()+Math.max(1000,(Number(res.headers.get('Retry-After')) || 15)*1000);
           this.s.spotifyRetryAt = event.retryAt;
           if (this.s.pending === event) this.s.pending = event;
@@ -203,6 +228,8 @@ export class PresentationMonitor extends DurableObject {
     if (this.running) return;
     if (Date.now() >= this.s.endsAt) return this.finish('expired');
     this.running = true;
+    this.diag.pollCheckpointOpen=true;
+    await this.save();
     const runId = this.s.runId;
     const began = Date.now();
     const chunkEnd = Math.min(began+8000,this.s.endsAt);
@@ -220,7 +247,7 @@ export class PresentationMonitor extends DurableObject {
         b.attempts++;
         this.abort = new AbortController();
         try {
-          const event = await fetchInjectSelection(this.s.config.injectId,{timeout:4000,fetcher:(url,opts)=>fetch(url,{...opts,signal:AbortSignal.any([this.abort.signal,opts.signal])})});
+          const event = await fetchInjectSelection(this.s.config.injectId,{timeout:4000,fetcher:(url,opts)=>this.trackedFetch('inject','selection',url,{...opts,signal:AbortSignal.any([this.abort.signal,opts.signal])})});
           if (!this.s.active || this.s.runId !== runId) break;
           this.s.polls++; this.s.lastReadAt = Date.now(); sample(this.s.latencies,Date.now()-start);
           this.s.errorStreak = 0; this.s.nextPollAt = 0;
@@ -241,6 +268,7 @@ export class PresentationMonitor extends DurableObject {
         await sleep(Math.max(1,500-(Date.now()-start)));
       }
     } finally {
+      this.diag.pollCheckpointOpen=false;
       this.budgetToday().activeMs += Date.now()-began;
       this.running = false;
       if (this.s.runId === runId) {

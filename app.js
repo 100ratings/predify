@@ -1,17 +1,17 @@
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.10';
-import { recordDiagnostic, diagnosticReport } from './diagnostics.js?v=1.3.10';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.10';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.10';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.10';
-import { api, auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.10';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.10';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.10';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.10';
-import { preventZoom } from './zoom.js?v=1.3.10';
-import { watchAppUpdates } from './updates.js?v=1.3.10';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.10';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.10';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.10';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.11';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.11';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.11';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.11';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.11';
+import { api, auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.11';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.11';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.11';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.11';
+import { preventZoom } from './zoom.js?v=1.3.11';
+import { watchAppUpdates } from './updates.js?v=1.3.11';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.11';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.11';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.11';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -109,6 +109,7 @@ function setView(view) {
   $('scroll-area').scrollTop = 0;
   history.replaceState(null, '', '#' + view);
   if (view === 'catalog') paintCatalog();
+  if (view === 'settings') paintDiagnostics();
 }
 function paintAccount(me) {
   const connected = !!auth();
@@ -161,6 +162,7 @@ function paintPlaylist() {
   updateButton();
 }
 function restoreSavedPlaylists() {
+  recordDiagnostic('cache-hit',{operation:'startup',apiCalls:0});
   playlistCache.reload();
   playlistRequest++;
   playlists = auth() ? playlistCache.list() : [];
@@ -183,6 +185,7 @@ function saveCurrentPlaylistCache(selected,items) {
 }
 async function loadPlaylists() {
   if (loadingLists || !auth()) return;
+  recordDiagnostic('playlist-reload',{operation:'playlist-reload'});
   loadingLists = true; updateButton();
   try {
     const result = await myPlaylists(); playlists = result.items;
@@ -562,6 +565,7 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
   if (sending || playlistBusy || playlistLoading || importingCatalog || !auth() || !data.playlist) return false;
   const selected = playlists.find(playlist => playlist.id === data.playlist);
   if (!selected || !tracks.length) return false;
+  if(!inject)recordDiagnostic('manual-send',{operation:'manual-send',items:tracks.length});
   const sent = tracks.map(track => ({ ...track }));
   const target = selected.id;
   sending = true;
@@ -658,7 +662,7 @@ $('disconnect').onclick = async () => {
 };
 $('account-shortcut').onclick = () => setView('settings');
 $('reload-playlists').onclick = () => loadPlaylists();
-$('playlist').onchange = () => { data.playlist = $('playlist').value; persist(); paintPlaylist(); refreshPlaylistItems(); injectMonitor.resume(); };
+$('playlist').onchange = () => { recordDiagnostic('playlist-switch',{operation:'playlist-switch'}); data.playlist = $('playlist').value; persist(); paintPlaylist(); refreshPlaylistItems(); injectMonitor.resume(); };
 $('person-name').oninput = () => renderPreview();
 $('person-name').addEventListener('keydown', event => {
   if (event.key !== 'Enter' || event.isComposing || event.repeat) return;
@@ -683,6 +687,7 @@ const injectStatus = (message, error = false) => {
   $('inject-status').classList.toggle('inject-error', error);
 };
 const injectMonitor = createInjectMonitor({
+  read: id => fetchInjectSelection(id,{fetcher:(url,opts)=>diagnosticFetch('inject','selection',url,opts)}),
   active: () => !remoteKey() && !remoteBusy && !document.hidden && navigator.onLine && !!auth() && !!data.playlist && playlists.some(p => p.id === data.playlist),
   onSelection: async event => {
   if (sending || playlistBusy || playlistLoading || importingCatalog || !auth() ||
@@ -774,7 +779,7 @@ async function startRemote(mode) {
   remoteBusy = true; remoteMessage = 'Iniciando monitor remoto'; updateButton();
   try {
     if (mode === 'live') await synchronizeRemoteAuth(remoteRevision);
-    const request = {mode,injectId:injectIdInput.value,minutes:mode === 'test' ? 1 : Number($('remote-duration').value)};
+    const request = {diagnosticTestId:currentDiagnosticTest()?.id || null,mode,injectId:injectIdInput.value,minutes:mode === 'test' ? 1 : Number($('remote-duration').value)};
     if (mode === 'live') Object.assign(request,{playlist:data.playlist,catalog:data.catalog,opening:data.opening,auth:auth()});
     // A test never transmits Spotify credentials or requests playlist changes
     const state = await remoteRequest('start',request);
@@ -851,7 +856,7 @@ $('inject-test').onclick = async () => {
   $('inject-test-result').hidden = false;
   $('inject-test-result').textContent = 'Consultando Inject…';
   try {
-    const selection = await fetchInjectSelection(id);
+    const selection = await fetchInjectSelection(id,{fetcher:(url,opts)=>diagnosticFetch('inject','selection',url,opts)});
     $('inject-test-result').textContent = 'Conexão OK. Última palavra: “' + (selection.value || '(vazia)') + '”';
   } catch (error) {
     $('inject-test-result').textContent = 'Não foi possível testar: ' + error.message;
@@ -1005,10 +1010,12 @@ async function refreshPlaylistItems({ force = false } = {}) {
   if (!selectedId || !auth()) { playlistLoading = false; updateButton(); return; }
   const saved = !force && playlistCache.details(selectedId);
   if (saved) {
+    recordDiagnostic('cache-hit',{operation:'playlist-switch',apiCalls:0});
     playlistItems = saved.items; playlistLoadedFor = selectedId; playlistLoading = false;
     $('playlist-cache-status').textContent = 'Dados salvos no aparelho, use ↻ para buscar mudanças no Spotify';
     paintPlaylist(); return;
   }
+  recordDiagnostic('cache-miss',{operation:force?'playlist-reload':'playlist-switch'});
   playlistLoading = true; updateButton();
   try {
     const [items, images] = await Promise.all([
@@ -1207,14 +1214,40 @@ $('test-playlist-access').onclick = async () => {
     status.textContent = 'Consulta direta não concluída: ' + error.message;
   } finally { button.disabled = false; }
 };
-$('export-diagnostics').onclick = () => {
-  const blob = new Blob([JSON.stringify(diagnosticReport(),null,2)],{type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url; link.download = 'predify-diagnostico-' + new Date().toISOString().replace(/[:.]/g,'-') + '.json';
-  document.body.append(link); link.click(); link.remove();
-  setTimeout(() => URL.revokeObjectURL(url),60000);
+function paintDiagnostics() {
+  const summary=diagnosticSummary();
+  $('diagnostics-summary').textContent=summary.text;
+  $('diagnostic-begin').disabled=summary.active;
+  $('diagnostic-end').disabled=!summary.active || remoteState.active;
+  $('diagnostic-integrity').textContent=(summary.report.coverage.storageLimited?'Armazenamento limitado, exporte o diagnóstico antes de fechar o app. ':'')+
+    (summary.report.coverage.remotePossibleGap?'Houve reinício remoto com operação em andamento, pode haver lacuna na medição. ':'')+
+    (remoteState.active?'Encerre a apresentação antes de finalizar este registro. ':'')+
+    (summary.report.cloudflare?'Contadores remotos recebidos em '+new Date(summary.report.cloudflare.observedAt).toLocaleTimeString('pt-BR'):'Aguardando contadores da Cloudflare');
+}
+$('diagnostic-begin').onclick=()=>{beginDiagnosticTest();paintDiagnostics();};
+$('diagnostic-end').onclick=async()=>{
+  if(remoteState.active)return;
+  if(remoteKey())try{await remoteRequest('status');}catch{/* Export keeps the last available server snapshot */}
+  endDiagnosticTest();paintDiagnostics();
 };
+$('diagnostic-refresh').onclick=async()=>{
+  const button=$('diagnostic-refresh');button.disabled=true;
+  try{if(remoteKey())await remoteRequest('status');}catch(error){toast(error.message,true);}
+  finally{paintDiagnostics();button.disabled=false;}
+};
+$('export-diagnostics').onclick = async () => {
+  const button=$('export-diagnostics');button.disabled=true;
+  try {
+    if(remoteKey())try{await remoteRequest('status');}catch{/* Export remains available offline */}
+    const blob = new Blob([JSON.stringify(diagnosticReport(),null,2)],{type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = 'predify-diagnostico-' + new Date().toISOString().replace(/[:.]/g,'-') + '.json';
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url),60000);
+  } finally{button.disabled=false;paintDiagnostics();}
+};
+setInterval(()=>{if(!document.hidden && $('settings-view').classList.contains('active'))paintDiagnostics();},1000);
 async function start() {
   recordDiagnostic('app-start');
   // Start update checks before any Spotify requests or complex UI initialization

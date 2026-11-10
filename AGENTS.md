@@ -42,3 +42,9 @@ Playlist metadata and up to five playlists of cached contents are saved locally,
 Only an explicit reload, first selection without cached contents, or a completed new OAuth connection should fetch playlist data
 Keep manual send backup and verification fresh, cache updates only after an acknowledged write, clear the cache on disconnect or completed new OAuth connection
 Cached playlist names, contents and covers may be stale until explicit reload, indicate this in the UI
+
+Diagnostics count HTTP attempts before fetch, responses and network failures separately, never count a cached action or cooldown block as an API request
+Keep browser ledgers isolated per runtime to prevent simultaneous tabs overwriting counters, aggregate retained ledgers on export
+All telemetry must use allowlisted operation labels and numeric counters, never store URLs, query text, Inject values, playlist identifiers, auth headers or bodies
+Remote metrics are persisted in the Durable Object and returned through authenticated status, browser snapshots replace previous server snapshots rather than being added repeatedly
+Counter coverage begins at instrumentation deployment, mark possible gaps after interrupted remote checkpoints, never imply these counters are Spotify quota units
