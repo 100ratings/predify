@@ -1,16 +1,16 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.4';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.4';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.4';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.4';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.4';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.4';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.4';
-import { preventZoom } from './zoom.js?v=1.3.4';
-import { createKeepAwake } from './keep-awake.js?v=1.3.4';
-import { watchAppUpdates } from './updates.js?v=1.3.4';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.4';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.4';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE } from './remote.js?v=1.3.4';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.5';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.5';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.5';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.5';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.5';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.5';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.5';
+import { preventZoom } from './zoom.js?v=1.3.5';
+import { createKeepAwake } from './keep-awake.js?v=1.3.5';
+import { watchAppUpdates } from './updates.js?v=1.3.5';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.5';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.5';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.5';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -62,7 +62,7 @@ function loadLastSuccess() {
   try {
     const item = JSON.parse(localStorage.getItem(LAST_SUCCESS_KEY));
     return item && spotifyId(item.playlist, 'playlist') && typeof item.word === 'string' && item.word.trim()
-      ? { playlist: item.playlist, word: item.word.trim().slice(0, 100) }
+      ? { playlist: item.playlist, word: item.word.trim().slice(0, 100), at: Number.isFinite(item.at) ? item.at : 0 }
       : null;
   } catch { return null; }
 }
@@ -592,7 +592,7 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
     }
     await replacePlaylist(target, sent);
     // Never show success until Spotify acknowledges the PUT
-    lastSuccessfulSend = { playlist: target, word: submittedWord };
+    lastSuccessfulSend = { playlist: target, word: submittedWord, at: Date.now() };
     try { localStorage.setItem(LAST_SUCCESS_KEY, JSON.stringify(lastSuccessfulSend)); }
     catch { /* Keep the confirmation visible even if storage is full */ }
     paintLastSuccessfulWord();
@@ -741,8 +741,8 @@ function applyRemoteStatus(state) {
   remoteState = state;
   remoteUnknown = false;
   const sent = state.lastSuccess;
-  if (sent?.snapshotId && sent.playlist && sent.word) {
-    lastSuccessfulSend = {playlist:sent.playlist,word:sent.word};
+  if (sent?.snapshotId && sent.playlist && sent.word && isNewRemoteConfirmation(sent, lastSuccessfulSend)) {
+    lastSuccessfulSend = {playlist:sent.playlist,word:sent.word,at:sent.at};
     try { localStorage.setItem(LAST_SUCCESS_KEY,JSON.stringify(lastSuccessfulSend)); } catch { /* UI confirmation remains available */ }
     paintLastSuccessfulWord();
   }

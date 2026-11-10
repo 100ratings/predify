@@ -1,5 +1,8 @@
 export const REMOTE_URL = 'https://predify-inject-lab.omentalistademian.workers.dev';
 export const REMOTE_KEY_STORAGE = 'predify.remote.key.v1';
+export function isNewRemoteConfirmation(sent, current) {
+  return Number.isFinite(sent?.at) && sent.at > (Number.isFinite(current?.at) ? current.at : 0);
+}
 export function remoteKey() { try { return localStorage.getItem(REMOTE_KEY_STORAGE) || ''; } catch { return ''; } }
 export function saveRemoteKey(value) {
   const key = String(value).trim();

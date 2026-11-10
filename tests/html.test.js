@@ -155,8 +155,9 @@ test('last successful Spotify word is shown next to initials and saved only afte
   assert.match(app, /localStorage\.setItem\(LAST_SUCCESS_KEY, JSON\.stringify\(lastSuccessfulSend\)\)/);
   assert.match(app, /event\.key === LAST_SUCCESS_KEY/);
   const success=app.slice(app.indexOf("async function sendSequenceToSpotify("),app.indexOf("$('connect').onclick ="));
-  assert.ok(success.indexOf('await replacePlaylist(target, sent)') < success.indexOf('lastSuccessfulSend = { playlist: target, word: submittedWord }'));
-  assert.ok(success.indexOf('lastSuccessfulSend = { playlist: target, word: submittedWord }') < success.indexOf('let verified = false'));
+  const confirmation = success.search(/lastSuccessfulSend\s*=\s*\{/);
+  assert.ok(success.indexOf('await replacePlaylist(target, sent)') < confirmation);
+  assert.ok(confirmation < success.indexOf('let verified = false'));
   assert.match(success, /const submittedWord = \$\('person-name'\)\.value\.trim\(\)/);
   assert.match(success, /toast\(error\.message/);
   assert.match(app, /if \(!\$\('update'\)\.disabled\) \$\('update'\)\.click\(\)/);
