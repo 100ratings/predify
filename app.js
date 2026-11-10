@@ -1,16 +1,16 @@
-import { recordDiagnostic, diagnosticReport } from './diagnostics.js?v=1.3.8';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.8';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.8';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.8';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.8';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.8';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.8';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.8';
-import { preventZoom } from './zoom.js?v=1.3.8';
-import { watchAppUpdates } from './updates.js?v=1.3.8';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.8';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.8';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.8';
+import { recordDiagnostic, diagnosticReport } from './diagnostics.js?v=1.3.9';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.9';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.9';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.9';
+import { api, auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.9';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.9';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.9';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.9';
+import { preventZoom } from './zoom.js?v=1.3.9';
+import { watchAppUpdates } from './updates.js?v=1.3.9';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.9';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.9';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.9';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -1159,6 +1159,20 @@ $('search-more').onclick = async () => {
   paintSearchResults();
 };
 
+$('test-playlist-access').onclick = async () => {
+  const button = $('test-playlist-access'), status = $('playlist-access-status');
+  const id = spotifyId($('diagnostic-playlist').value.trim() || data.playlist, 'playlist');
+  if (!id) { status.textContent = 'Cole o link da playlist que deseja verificar'; return; }
+  if (!auth()) { status.textContent = 'Conecte o Spotify antes de verificar'; return; }
+  button.disabled = true;
+  status.textContent = 'Consultando diretamente a playlist, sem alterar músicas…';
+  try {
+    await api('/playlists/' + id + '/items?limit=1');
+    status.textContent = 'Consulta direta aceita pelo Spotify, o acesso às músicas funciona, este teste não verifica permissão de envio';
+  } catch (error) {
+    status.textContent = 'Consulta direta não concluída: ' + error.message;
+  } finally { button.disabled = false; }
+};
 $('export-diagnostics').onclick = () => {
   const blob = new Blob([JSON.stringify(diagnosticReport(),null,2)],{type:'application/json'});
   const url = URL.createObjectURL(blob);

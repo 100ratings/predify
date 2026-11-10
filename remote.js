@@ -1,4 +1,4 @@
-import { recordDiagnostic } from './diagnostics.js?v=1.3.8';
+import { recordDiagnostic } from './diagnostics.js?v=1.3.9';
 let lastDiagnosticState = '';
 export const REMOTE_URL = 'https://predify-inject-lab.omentalistademian.workers.dev';
 export const REMOTE_KEY_STORAGE = 'predify.remote.key.v1';

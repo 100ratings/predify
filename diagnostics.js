@@ -1,4 +1,4 @@
-import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.8';
+import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.9';
 const KEY = 'predify.diagnostics.v1';
 const LIMIT = 400;
 let events = [];
