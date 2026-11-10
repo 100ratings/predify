@@ -164,10 +164,10 @@ test('last successful Spotify word is shown next to initials and saved only afte
   assert.match(app, /if \(!\$\('update'\)\.disabled\) \$\('update'\)\.click\(\)/);
 });
 
-test('Inject has only a four-digit ID field and read-only test action between Spotify and opening', () => {
+test('Inject keeps its four-digit ID and read-only test in the requested settings order', () => {
   const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
-  assert.ok(html.indexOf('id="account-state"') < html.indexOf('id="inject-id"'));
-  assert.ok(html.indexOf('id="inject-id"') < html.indexOf('id="opening-progress"'));
+  const order=['id="diagnostic-title"','<h2>Seu catálogo</h2>','id="opening-settings"','id="inject-title"','id="account-state"','id="app-update-title"'];
+  for(let i=1;i<order.length;i++)assert.ok(html.indexOf(order[i-1]) < html.indexOf(order[i]));
   assert.match(html,/id="inject-id"[^>]*inputmode="numeric"[^>]*maxlength="4"/);
   assert.match(html,/id="inject-test"[^>]*>Verificar/);
   assert.match(html,/id="inject-title">Inject API/);

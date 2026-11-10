@@ -13,15 +13,15 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://i.scdn.co https://mosaic.scdn.co data:; connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://11z.co https://predify-inject-lab.omentalistademian.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Predify</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.3.16">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.3.16">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.3.16">
-<link rel="stylesheet" href="style.css?v=1.3.16">
-<script type="module" src="app.js?v=1.3.16"></script>
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.3.17">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.3.17">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.3.17">
+<link rel="stylesheet" href="style.css?v=1.3.17">
+<script type="module" src="app.js?v=1.3.17"></script>
 </head>
 <body>
 <div id="app">
-<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.3.16" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
+<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.3.17" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
 <main id="scroll-area">
 <section id="perform-view" class="view active" aria-labelledby="perform-title">
 <div class="heading"><p class="eyebrow">SUA PRÓXIMA EXPERIÊNCIA</p><h1 id="perform-title">Uma coincidência musical<span class="green">,</span></h1><div class="perform-subline"><p class="subtle">Uma playlist, mais do que parece</p></div></div>
@@ -64,35 +64,6 @@
 <section id="settings-view" class="view" aria-labelledby="settings-title">
 <div class="heading"><p class="eyebrow">DO SEU JEITO</p><h1 id="settings-title">Tudo pronto<span class="green">,</span></h1><p class="subtle">Conecte sua conta e prepare a abertura</p></div>
 <div class="settings-grid">
-<section class="settings-card"><div class="section-heading"><h2>Conta Spotify</h2><span id="account-state" class="count-badge">Desconectada</span></div><p id="account-name" class="subtle">Conecte a conta que possui suas playlists</p><p id="spotify-connection-error" class="spotify-connection-error small" role="alert" hidden></p><button id="connect" class="primary">Conectar Spotify ↗</button><button id="disconnect" class="secondary" hidden>Desconectar deste aparelho</button><p class="small subtle">A sessão é renovada automaticamente neste aparelho enquanto o Spotify permitir</p></section>
-<section class="settings-card inject-card" aria-labelledby="inject-title">
-<div class="section-heading"><h2 id="inject-title">Inject API</h2><span class="count-badge">500 ms</span></div>
-<label for="inject-id">Seu ID oculto</label>
-<div class="inject-row"><input id="inject-id" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="4 dígitos" aria-describedby="inject-status"><button id="inject-test" class="secondary" type="button">Verificar</button></div>
-<p id="inject-status" class="small subtle" role="status" aria-live="polite">Informe seu ID oculto para ativar o Inject</p>
-<p id="inject-test-result" class="small subtle" role="status" aria-live="polite" hidden></p>
-<hr><h3>Monitor remoto</h3>
-<div id="remote-pairing"><label for="remote-key">Chave de conexão</label>
-<div class="inject-row"><input id="remote-key" type="password" autocomplete="off" placeholder="Cole a chave privada do monitor"><button id="remote-pair" class="secondary" type="button">Conectar</button></div></div>
-<p id="remote-connection-status" class="small subtle" role="status">Conecte o monitor para usar o Predify com o iPhone bloqueado</p>
-<div class="remote-actions"><button id="remote-configure" class="secondary" type="button" hidden>Alterar conexão</button><button id="remote-unpair" class="secondary" type="button">Desconectar monitor</button></div>
-</section>
-<details class="settings-card opening-settings" id="opening-settings"><summary class="section-heading"><h2>Abertura fixa</h2><span id="opening-progress" class="count-badge">Não configurada</span></summary><p class="subtle small">Repertório independente do catálogo, sem músicas repetidas</p>
-<label for="opening-phrase">Frase</label><input id="opening-phrase" type="text" value="VOCÊ VAI PENSAR EM" maxlength="100">
-<button id="prepare-opening" class="secondary" type="button">Escolher músicas da abertura</button>
-<p id="opening-summary" class="small subtle">Sem abertura salva, o app envia apenas o nome</p>
-<div id="opening-editor" class="opening-editor"></div>
-<section id="opening-search-panel" class="opening-search-panel" hidden>
-<div class="section-heading"><h3 id="opening-search-title">Buscar no Spotify</h3><span class="search-provider">SPOTIFY ↗</span></div>
-<form id="opening-search-form" class="catalog-search-form"><input id="opening-search" type="search" placeholder="Buscar música pelo nome" aria-label="Buscar música para abertura" autocomplete="off"><button id="opening-search-submit" type="submit" class="slot-save">Buscar</button></form>
-<p id="opening-search-status" class="small subtle" role="status"></p>
-<div id="opening-search-results" class="search-results"></div>
-<button id="opening-search-more" class="secondary" type="button" hidden>Próximas 5 músicas</button>
-<form id="opening-link-form" class="catalog-search-form"><input id="opening-link" type="url" placeholder="Ou cole o link da música" aria-label="Link de música para abertura"><button id="opening-link-submit" type="submit" class="slot-save">Escolher</button></form>
-</section>
-<button id="save-opening" class="primary" hidden disabled>Salvar abertura fixa</button>
-</details>
-<section class="settings-card"><h2>Seu catálogo</h2><p class="subtle">Catálogo e ajustes ficam salvos neste aparelho, exporte uma cópia para guardar ou levar a outro</p><div class="button-row"><button id="export" class="secondary">Exportar catálogo ↓</button><button id="import" class="secondary">Importar catálogo ↑</button><button id="cancel-import" class="secondary" type="button" hidden>Cancelar importação</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><p id="import-status" class="small subtle" role="status" aria-live="polite">Exporte suas escolhas para guardar uma cópia, importe um arquivo de até cinco músicas por letra quando desejar, as sugestões aparecem automaticamente na aba Catálogo</p><p class="small subtle">A cópia não inclui sua conexão nem credenciais do Spotify</p></section>
 <section class="settings-card" aria-labelledby="diagnostic-title"><h2 id="diagnostic-title">Diagnóstico</h2>
 <div class="spotify-daily">
 <p id="spotify-daily-total" class="spotify-daily-total" role="status">API do Spotify hoje: 0 chamadas</p>
@@ -114,7 +85,36 @@
 <p class="small subtle">O teste consulta apenas o Inject, sem alterar suas músicas</p>
 <p class="small subtle">Até 2000 eventos recentes e contadores com retenção de 14 dias neste aparelho, sem tokens, chaves, palavras ou catálogo, a exportação busca os dados mais recentes do monitor remoto</p>
 </details></section>
-<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.3.16</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
+<section class="settings-card"><h2>Seu catálogo</h2><p class="subtle">Catálogo e ajustes ficam salvos neste aparelho, exporte uma cópia para guardar ou levar a outro</p><div class="button-row"><button id="export" class="secondary">Exportar catálogo ↓</button><button id="import" class="secondary">Importar catálogo ↑</button><button id="cancel-import" class="secondary" type="button" hidden>Cancelar importação</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><p id="import-status" class="small subtle" role="status" aria-live="polite">Exporte suas escolhas para guardar uma cópia, importe um arquivo de até cinco músicas por letra quando desejar, as sugestões aparecem automaticamente na aba Catálogo</p><p class="small subtle">A cópia não inclui sua conexão nem credenciais do Spotify</p></section>
+<details class="settings-card opening-settings" id="opening-settings"><summary class="section-heading"><h2>Abertura fixa</h2><span id="opening-progress" class="count-badge">Não configurada</span></summary><p class="subtle small">Repertório independente do catálogo, sem músicas repetidas</p>
+<label for="opening-phrase">Frase</label><input id="opening-phrase" type="text" value="VOCÊ VAI PENSAR EM" maxlength="100">
+<button id="prepare-opening" class="secondary" type="button">Escolher músicas da abertura</button>
+<p id="opening-summary" class="small subtle">Sem abertura salva, o app envia apenas o nome</p>
+<div id="opening-editor" class="opening-editor"></div>
+<section id="opening-search-panel" class="opening-search-panel" hidden>
+<div class="section-heading"><h3 id="opening-search-title">Buscar no Spotify</h3><span class="search-provider">SPOTIFY ↗</span></div>
+<form id="opening-search-form" class="catalog-search-form"><input id="opening-search" type="search" placeholder="Buscar música pelo nome" aria-label="Buscar música para abertura" autocomplete="off"><button id="opening-search-submit" type="submit" class="slot-save">Buscar</button></form>
+<p id="opening-search-status" class="small subtle" role="status"></p>
+<div id="opening-search-results" class="search-results"></div>
+<button id="opening-search-more" class="secondary" type="button" hidden>Próximas 5 músicas</button>
+<form id="opening-link-form" class="catalog-search-form"><input id="opening-link" type="url" placeholder="Ou cole o link da música" aria-label="Link de música para abertura"><button id="opening-link-submit" type="submit" class="slot-save">Escolher</button></form>
+</section>
+<button id="save-opening" class="primary" hidden disabled>Salvar abertura fixa</button>
+</details>
+<section class="settings-card inject-card" aria-labelledby="inject-title">
+<div class="section-heading"><h2 id="inject-title">Inject API</h2><span class="count-badge">500 ms</span></div>
+<label for="inject-id">Seu ID oculto</label>
+<div class="inject-row"><input id="inject-id" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="4 dígitos" aria-describedby="inject-status"><button id="inject-test" class="secondary" type="button">Verificar</button></div>
+<p id="inject-status" class="small subtle" role="status" aria-live="polite">Informe seu ID oculto para ativar o Inject</p>
+<p id="inject-test-result" class="small subtle" role="status" aria-live="polite" hidden></p>
+<hr><h3>Monitor remoto</h3>
+<div id="remote-pairing"><label for="remote-key">Chave de conexão</label>
+<div class="inject-row"><input id="remote-key" type="password" autocomplete="off" placeholder="Cole a chave privada do monitor"><button id="remote-pair" class="secondary" type="button">Conectar</button></div></div>
+<p id="remote-connection-status" class="small subtle" role="status">Conecte o monitor para usar o Predify com o iPhone bloqueado</p>
+<div class="remote-actions"><button id="remote-configure" class="secondary" type="button" hidden>Alterar conexão</button><button id="remote-unpair" class="secondary" type="button">Desconectar monitor</button></div>
+</section>
+<section class="settings-card"><div class="section-heading"><h2>Conta Spotify</h2><span id="account-state" class="count-badge">Desconectada</span></div><p id="account-name" class="subtle">Conecte a conta que possui suas playlists</p><p id="spotify-connection-error" class="spotify-connection-error small" role="alert" hidden></p><button id="connect" class="primary">Conectar Spotify ↗</button><button id="disconnect" class="secondary" hidden>Desconectar deste aparelho</button><p class="small subtle">A sessão é renovada automaticamente neste aparelho enquanto o Spotify permitir</p></section>
+<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.3.17</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
 </div>
 </section>
 </main>
