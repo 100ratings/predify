@@ -40,7 +40,7 @@ Keep Inject polling, Spotify actions, all other input fields and the keyboard-cl
 
 Playlist metadata and up to five playlists of cached contents are saved locally, never fetch Spotify playlists automatically on a normal app launch or token refresh
 Only an explicit reload, first selection without cached contents, or a completed new OAuth connection should fetch playlist data
-Keep manual send backup and verification fresh, cache updates only after an acknowledged write, clear the cache on disconnect or completed new OAuth connection
+Keep the manual pre-send backup fresh and validate the PUT snapshot_id, do not re-read the playlist after sending, cache updates only after an acknowledged write, clear the cache on disconnect or completed new OAuth connection
 Cached playlist names, contents and covers may be stale until explicit reload, indicate this in the UI
 
 Diagnostics count HTTP attempts before fetch, responses and network failures separately, never count a cached action or cooldown block as an API request
@@ -48,3 +48,8 @@ Keep browser ledgers isolated per runtime to prevent simultaneous tabs overwriti
 All telemetry must use allowlisted operation labels and numeric counters, never store URLs, query text, Inject values, playlist identifiers, auth headers or bodies
 Remote metrics are persisted in the Durable Object and returned through authenticated status, browser snapshots replace previous server snapshots rather than being added repeatedly
 Counter coverage begins at instrumentation deployment, mark possible gaps after interrupted remote checkpoints, never imply these counters are Spotify quota units
+
+Keep diagnosis record/export controls visible, detailed counters and read-only remote test collapsed under Diagnóstico avançado
+Do not reintroduce a refresh counters button or direct playlist-link probe without user approval
+Hide the remote key form while paired, provide Alterar conexão to reveal it without disconnecting
+Poll remote status every 60 seconds when confirmed inactive, retain 2.5 seconds while active, unknown or after an error, and immediate explicit checks on startup, foreground and user actions

@@ -12,3 +12,11 @@ test('a stopped remote session cannot replace a newer manual success, including 
   assert.equal(isNewRemoteConfirmation(oldRemote,null),true);
   assert.equal(isNewRemoteConfirmation({word:'unknown date'},manual),false);
 });
+
+test('remote status checks slow only after a confirmed inactive state',async()=>{
+ const {remoteStatusInterval}=await import('../remote.js');
+ assert.equal(remoteStatusInterval({active:false}),60000);
+ assert.equal(remoteStatusInterval({active:true}),2500);
+ assert.equal(remoteStatusInterval({unknown:true}),2500);
+ assert.equal(remoteStatusInterval({error:true}),2500);
+});

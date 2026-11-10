@@ -1,4 +1,4 @@
-import { recordDiagnostic, diagnosticFetch, updateRemoteDiagnostics } from './diagnostics.js?v=1.3.12';
+import { recordDiagnostic, diagnosticFetch, updateRemoteDiagnostics } from './diagnostics.js?v=1.3.13';
 let lastDiagnosticState = '';
 export const REMOTE_URL = 'https://predify-inject-lab.omentalistademian.workers.dev';
 export const REMOTE_KEY_STORAGE = 'predify.remote.key.v1';
@@ -41,4 +41,8 @@ export async function remoteRequest(action, body) {
   }
   if (!res.ok) throw new Error(data.error || 'Monitor remoto HTTP '+res.status);
   return data;
+}
+
+export function remoteStatusInterval({active=false,unknown=false,error=false}={}) {
+  return active || unknown || error ? 2500 : 60000;
 }

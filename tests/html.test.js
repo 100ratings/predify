@@ -157,7 +157,8 @@ test('last successful Spotify word is shown next to initials and saved only afte
   const success=app.slice(app.indexOf("async function sendSequenceToSpotify("),app.indexOf("$('connect').onclick ="));
   const confirmation = success.search(/lastSuccessfulSend\s*=\s*\{/);
   assert.ok(success.indexOf('await replacePlaylist(target, sent)') < confirmation);
-  assert.ok(confirmation < success.indexOf('let verified = false'));
+  assert.doesNotMatch(success, /let verified|const current = await playlistTracks/);
+  assert.equal((success.match(/await playlistTracks\(target\)/g)||[]).length,1);
   assert.match(success, /const submittedWord = \$\('person-name'\)\.value\.trim\(\)/);
   assert.match(success, /toast\(error\.message/);
   assert.match(app, /if \(!\$\('update'\)\.disabled\) \$\('update'\)\.click\(\)/);
@@ -186,7 +187,7 @@ test('Inject has only a four-digit ID field and read-only test action between Sp
   assert.ok(update.indexOf('await replacePlaylist(target, sent)') < update.indexOf('return true;'));
   assert.match(update,/await replacePlaylist\(target, sent\)/);
   assert.match(update,/if \(inject\) throw error/);
-  assert.match(update,/if \(!inject\) \{/);
+  assert.match(update,/const previous = await playlistTracks\(target\)/);
   assert.match(update,/playlistItems = sent/);
 });
 
@@ -239,4 +240,17 @@ test('calibrated +10 px manual keyboard position stays after temporary panel rem
   assert.ok(app.includes("classList.toggle('keyboard-manual-offset', manualKeyboard)"));
   assert.ok(app.includes("composer.getBoundingClientRect().bottom - visualOffset"));
   assert.ok(css.includes('.keyboard-open #perform-view.keyboard-manual-offset{transform:translateY(var(--manual-keyboard-offset,0px))}'));
+});
+
+test('diagnostic tools are collapsed, record/export remain visible and obsolete probe controls are removed',()=>{
+ const advanced=html.slice(html.indexOf('<details id="diagnostic-advanced"'),html.indexOf('</details>',html.indexOf('<details id="diagnostic-advanced"')));
+ assert.match(advanced,/<summary>Diagnóstico avançado<\/summary>/);
+ assert.doesNotMatch(advanced,/<details[^>]*\bopen\b/);
+ assert.match(advanced,/id="diagnostics-summary"/);
+ assert.match(advanced,/id="remote-test"/);
+ for(const id of ['diagnostic-begin','diagnostic-end','export-diagnostics']){assert.ok(html.includes('id="'+id+'"'));assert.ok(!advanced.includes('id="'+id+'"'));}
+ assert.doesNotMatch(html,/id="(?:diagnostic-refresh|diagnostic-playlist|test-playlist-access|playlist-access-status)"/);
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ assert.match(app,/\$\('remote-pairing'\)\.hidden = paired && !remoteConfigOpen/);
+ assert.match(app,/\$\('remote-configure'\)\.hidden = !paired/);
 });
