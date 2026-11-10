@@ -1,17 +1,17 @@
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.11';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.11';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.11';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.11';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.11';
-import { api, auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.11';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.11';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.11';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.11';
-import { preventZoom } from './zoom.js?v=1.3.11';
-import { watchAppUpdates } from './updates.js?v=1.3.11';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.11';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.11';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.11';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.12';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.12';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.12';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.12';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.12';
+import { api, auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.12';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.12';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.12';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.12';
+import { preventZoom } from './zoom.js?v=1.3.12';
+import { watchAppUpdates } from './updates.js?v=1.3.12';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.12';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.12';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.12';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -821,7 +821,7 @@ $('remote-unpair').onclick = async () => {
     await remoteRequest('stop',{});
     await synchronizeRemoteAuth(remoteRevision);
     // Adopt a fresh baseline before returning ownership to the existing local receiver
-    const selection = validInjectId(injectIdInput.value) ? await fetchInjectSelection(injectIdInput.value) : null;
+    const selection = validInjectId(injectIdInput.value) ? await fetchInjectSelection(injectIdInput.value,{fetcher:(url,opts)=>diagnosticFetch('inject','selection',url,opts)}) : null;
     if (selection) localStorage.setItem('predify.inject.count.v1.'+injectIdInput.value,selection.count);
     localStorage.removeItem(REMOTE_KEY_STORAGE); remoteState = {active:false}; remoteUnknown = false; remoteMessage = '';
     injectMonitor.stop(); injectMonitor.setId(''); injectMonitor.setId(injectIdInput.value);
@@ -1217,14 +1217,14 @@ $('test-playlist-access').onclick = async () => {
 function paintDiagnostics() {
   const summary=diagnosticSummary();
   $('diagnostics-summary').textContent=summary.text;
-  $('diagnostic-begin').disabled=summary.active;
+  $('diagnostic-begin').disabled=summary.active || remoteState.active || remoteUnknown;
   $('diagnostic-end').disabled=!summary.active || remoteState.active;
   $('diagnostic-integrity').textContent=(summary.report.coverage.storageLimited?'Armazenamento limitado, exporte o diagnóstico antes de fechar o app. ':'')+
     (summary.report.coverage.remotePossibleGap?'Houve reinício remoto com operação em andamento, pode haver lacuna na medição. ':'')+
-    (remoteState.active?'Encerre a apresentação antes de finalizar este registro. ':'')+
+    (remoteState.active?'Encerre a apresentação antes de iniciar ou finalizar um registro. ':'')+
     (summary.report.cloudflare?'Contadores remotos recebidos em '+new Date(summary.report.cloudflare.observedAt).toLocaleTimeString('pt-BR'):'Aguardando contadores da Cloudflare');
 }
-$('diagnostic-begin').onclick=()=>{beginDiagnosticTest();paintDiagnostics();};
+$('diagnostic-begin').onclick=()=>{if(remoteState.active || remoteUnknown)return;beginDiagnosticTest();paintDiagnostics();};
 $('diagnostic-end').onclick=async()=>{
   if(remoteState.active)return;
   if(remoteKey())try{await remoteRequest('status');}catch{/* Export keeps the last available server snapshot */}

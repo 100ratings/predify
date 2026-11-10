@@ -1,7 +1,7 @@
-import { recordDiagnostic, spotifyOperation, diagnosticFetch } from './diagnostics.js?v=1.3.11';
-import { spotifyId, cleanTrack } from './engine.js?v=1.3.11';
-import { candidateScore } from './catalog-import.js?v=1.3.11';
-import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.11';
+import { recordDiagnostic, spotifyOperation, diagnosticFetch } from './diagnostics.js?v=1.3.12';
+import { spotifyId, cleanTrack } from './engine.js?v=1.3.12';
+import { candidateScore } from './catalog-import.js?v=1.3.12';
+import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.12';
 export const CLIENT_ID = 'ea812e9b0ada47778150c48b62bf02ee';
 export const SCOPES = ['playlist-modify-public', 'playlist-modify-private', 'playlist-read-private'];
 const KEY = 'predify.auth.v1';

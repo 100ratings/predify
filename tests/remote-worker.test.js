@@ -60,6 +60,7 @@ test('test mode polls and detects counts without Spotify, survives restarts and 
     assert.equal(restarted.monitor.s.changes,changes);
     assert.equal(restarted.state.alarm,undefined);
     const before=reads; await restarted.monitor.alarm(); assert.equal(reads,before);
+    assert.equal(restarted.monitor.status().diagnostics.totals['inject|selection|GET'].attempts,reads);
     assert.ok(reads>=100); assert.equal(restarted.monitor.status().intervalMs.p50,500);
     assert.equal(JSON.stringify(restarted.monitor.status()).includes('sealedAuth'),false);
   } finally {globalThis.fetch=realFetch;Date.now=realNow;globalThis.setTimeout=realTimer;}
