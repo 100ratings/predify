@@ -53,3 +53,7 @@ Keep diagnosis record/export controls visible, detailed counters and read-only r
 Do not reintroduce a refresh counters button or direct playlist-link probe without user approval
 Hide the remote key form while paired, provide Alterar conexão to reveal it without disconnecting
 Poll remote status every 60 seconds when confirmed inactive, retain 2.5 seconds while active, unknown or after an error, and immediate explicit checks on startup, foreground and user actions
+
+Record fixed, allowlisted send-block reasons and readiness transitions without changing send guards or recording words, playlist identity or raw error messages
+Force a readiness snapshot when a diagnostic test begins, do not count these local events as HTTP calls
+Disabled-button pointer events are best effort, never imply a missing pointer event proves the user did not try to send

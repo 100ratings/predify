@@ -52,3 +52,15 @@ test('server metrics snapshots replace prior snapshots without counting them rep
  assert.equal(r.cloudflare.totals['spotify|playlist-items|PUT'].attempts,3);
  assert.equal(JSON.stringify(r.cloudflare).includes('secret'),false);
 });
+
+test('unavailable-send logging allows only fixed reason codes and does not increment HTTP counters',async()=>{
+ const d=await import('../diagnostics.js');
+ d.beginDiagnosticTest();
+ d.recordDiagnostic('manual-blocked',{operation:'manual-send',reasonCodes:['sequence-empty','private-word','sequence-empty'],word:'private-word',stage:'write'});
+ const r=d.diagnosticReport();const event=r.events.findLast(e=>e.event==='manual-blocked');
+ assert.deepEqual(event.reasonCodes,['sequence-empty']);
+ assert.equal(JSON.stringify(event).includes('private-word'),false);
+ const t=r.tests.find(t=>!t.endedAt);assert.deepEqual(t.browser,{});
+ assert.equal(r.reasonLegend['sequence-empty'],'A sequência não contém músicas para enviar');
+ d.endDiagnosticTest();
+});

@@ -5,19 +5,21 @@ import {readFileSync} from 'node:fs';
 const values=new Map();
 global.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k),get length(){return values.size;},key:i=>[...values.keys()][i]};
 const {playlistTracks,replacePlaylist}=await import('../spotify.js');
+const {sendBlockReasons}=await import('../send-diagnostics.js');
 const page=readFileSync(new URL('../app.js',import.meta.url),'utf8');
-const source=page.slice(page.indexOf('async function sendSequenceToSpotify('),page.indexOf("$('update').onclick ="));
+const helpers=page.slice(page.indexOf('function currentSendReasons('),page.indexOf('function updateButton() {'));
+const source=helpers+page.slice(page.indexOf('async function sendSequenceToSpotify('),page.indexOf("$('update').onclick ="));
 const id='p'.repeat(22),before={id:'b'.repeat(22),uri:'spotify:track:'+'b'.repeat(22)},after={id:'a'.repeat(22),uri:'spotify:track:'+'a'.repeat(22)};
 function fixture(snapshot) {
  values.clear();values.set('predify.auth.v1',JSON.stringify({access_token:'test',refresh_token:'test',expires_at:Date.now()+3600000}));
- const methods=[],notices=[];
+ const methods=[],notices=[],events=[];
  global.fetch=async(url,opts)=>{methods.push(opts.method||'GET');return Response.json(opts.method==='PUT'?snapshot:{items:[{item:before}],next:null});};
  const elements={};
- const context={remoteOwnsPlaylist:()=>false,sending:false,playlistBusy:false,playlistLoading:false,importingCatalog:false,auth:()=>true,data:{playlist:id},playlists:[{id,name:'Test'}],recordDiagnostic:()=>{},updateButton:()=>{},playlistTracks,replacePlaylist,localStorage,
+ const context={sendBlockReasons,remoteBusy:false,remoteUnknown:false,remoteState:{active:false},sequence:{tracks:[after],error:''},lastManualReadiness:'',remoteOwnsPlaylist:()=>false,sending:false,playlistBusy:false,playlistLoading:false,importingCatalog:false,auth:()=>true,data:{playlist:id},playlists:[{id,name:'Test'}],recordDiagnostic:(name,details)=>events.push({name,...details}),updateButton:()=>{},playlistTracks,replacePlaylist,localStorage,
   lastSuccessfulSend:null,LAST_SUCCESS_KEY:'test.last-success',paintLastSuccessfulWord:()=>{},playlistItems:[],playlistLoadedFor:'',
   $:id=>elements[id] ||= {append:()=>{}},node:()=>({}),toast:message=>notices.push(message),saveCurrentPlaylistCache:()=>{},paintPlaylist:()=>{}};
  vm.createContext(context);const send=vm.runInContext(source+'\nsendSequenceToSpotify',context);
- return {context,methods,notices,send};
+ return {context,methods,notices,events,send};
 }
 test('manual send performs only fresh backup GET and acknowledged PUT, without post-send GET',async()=>{
  const f=fixture({snapshot_id:'confirmed'});
@@ -33,4 +35,25 @@ test('a PUT without a valid Spotify snapshot cannot mark the manual word as succ
  assert.deepEqual(f.methods,['GET','PUT']);
  assert.equal(f.context.lastSuccessfulSend,null);
  assert.ok(f.notices.some(text=>text.includes('sem confirmação')));
+});
+
+test('a blocked send records the actual reason and makes no HTTP request',async()=>{
+ const f=fixture({snapshot_id:'unused'});f.context.auth=()=>false;
+ assert.equal(await f.send('private word',[after]),false);
+ assert.deepEqual(f.methods,[]);
+ assert.deepEqual(Array.from(f.events[0].reasonCodes),['spotify-disconnected']);
+ assert.equal(JSON.stringify(f.events).includes('private word'),false);
+});
+
+test('manual readiness logs transitions, not repeated paints, and never the word or playlist identity',()=>{
+ const f=fixture({snapshot_id:'unused'});
+ vm.runInContext('recordManualReadiness();recordManualReadiness();',f.context);
+ assert.equal(f.events.length,1);
+ assert.equal(f.events[0].ready,true);
+ f.context.sequence.tracks=[];
+ vm.runInContext('recordManualReadiness();',f.context);
+ assert.equal(f.events.length,2);
+ assert.deepEqual(Array.from(f.events[1].reasonCodes),['sequence-empty']);
+ assert.equal(JSON.stringify(f.events).includes(id),false);
+ assert.deepEqual(f.methods,[]);
 });

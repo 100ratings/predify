@@ -1,5 +1,6 @@
-import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.14';
-import { metricKey,metricDay,countAttempt,countResult,mergeMetrics,metricCount } from './request-metrics.js?v=1.3.14';
+import { SEND_REASON_LABELS } from './send-diagnostics.js?v=1.3.15';
+import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.15';
+import { metricKey,metricDay,countAttempt,countResult,mergeMetrics,metricCount } from './request-metrics.js?v=1.3.15';
 const LEGACY_KEY='predify.diagnostics.v1', PREFIX='predify.diagnostics.v2.',TESTS_KEY='predify.diagnostic-tests.v2',REMOTE_KEY='predify.remote-metrics.v2';
 const LIMIT=2000, RETENTION_MS=14*86400000;
 const uuid=()=>globalThis.crypto?.randomUUID?.() || Date.now().toString(16)+'-'+Math.random().toString(16).slice(2);
@@ -14,7 +15,7 @@ function prune() {
 }
 prune();
 const persist=()=>{ledger.updatedAt=Date.now();write(key,ledger);};
-const allowedEvents=new Set(['app-start','spotify-response','spotify-network-error','spotify-wait','remote-response','remote-network-error','remote-state','request-start','request-result','cache-hit','cache-miss','playlist-switch','playlist-reload','manual-send','test-start','test-end','cooldown-blocked']);
+const allowedEvents=new Set(['app-start','spotify-response','spotify-network-error','spotify-wait','remote-response','remote-network-error','remote-state','request-start','request-result','cache-hit','cache-miss','playlist-switch','playlist-reload','manual-send','test-start','test-end','cooldown-blocked','manual-readiness','manual-blocked','inject-blocked','inject-observation','remote-readiness','remote-start-blocked','remote-start-attempt','send-accepted','send-failed']);
 const allowedOperations=new Set(['profile','playlists','playlist-items','playlist-images','track','search','token','selection','other','status','start','stop','sync','startup','playlist-switch','playlist-reload','manual-send']);
 function cleanEvent(name,details={},at=Date.now()) {
   const event={at,event:allowedEvents.has(name)?name:'other',version:typeof details.version==='string'&&/^\d+\.\d+\.\d+$/.test(details.version)?details.version:APP_VERSION};
@@ -23,6 +24,10 @@ function cleanEvent(name,details={},at=Date.now()) {
   if(['GET','POST','PUT','DELETE'].includes(details.method))event.method=details.method;
   for(const k of ['status','ms','retryAfter','polls','errors','changes','items','apiCalls'])if(Number.isFinite(details[k]))event[k]=Math.max(0,Math.round(details[k]));
   for(const k of ['testId','requestId'])if(validId(details[k]))event[k]=details[k];
+  if(Array.isArray(details.reasonCodes))event.reasonCodes=[...new Set(details.reasonCodes.filter(reason=>Object.hasOwn(SEND_REASON_LABELS,reason)))].slice(0,20);
+  if(['baseline','detected','sent','send-failed','empty'].includes(details.outcome))event.outcome=details.outcome;
+  if(['backup','write'].includes(details.stage))event.stage=details.stage;
+  if(typeof details.ready==='boolean')event.ready=details.ready;
   if(details.reason==='QUOTA_EXCEEDED')event.reason=details.reason;
   for(const k of ['active','hasError','reported'])if(typeof details[k]==='boolean')event[k]=details[k];
   return event;
@@ -104,8 +109,8 @@ export function diagnosticReport() {
   const legacy=read(LEGACY_KEY,[]);
   const events=[...(Array.isArray(legacy)?legacy:[]),...sources.flatMap(s=>s.events||[])].filter(e=>e&&Number.isFinite(e.at)).sort((a,b)=>a.at-b.at).slice(-LIMIT).map(e=>cleanEvent(e.event,e,e.at));
   return {schema:2,app:'Predify',version:APP_VERSION,build:BUILD_ID,exportedAt:new Date().toISOString(),timezone:'America/Sao_Paulo',retentionDays:14,limit:LIMIT,
-    coverage:{since:Math.min(ledger.since,...sources.map(s=>s.since||ledger.since)),storageLimited,meaning:'HTTP attempts initiated by Predify, not quota units or proof of receipt by Spotify',remoteSnapshotAvailable:!!remote,remotePossibleGap:!!remote?.runs.some(r=>r.possibleGap),legacyEventsNotCounted:true,browserScope:'Only this browser profile on this device; other devices require their own export',cloudflareScope:'Remote presentation calls from all paired devices, grouped by presentation and diagnostic test ID'},
-    browser:{totals,days,actions:mergeActions(sources.map(s=>s.actions))},cloudflare:remote,tests:reports,events};
+    coverage:{since:Math.min(ledger.since,...sources.map(s=>s.since||ledger.since)),storageLimited,meaning:'HTTP attempts initiated by Predify, not quota units or proof of receipt by Spotify',remoteSnapshotAvailable:!!remote,remotePossibleGap:!!remote?.runs.some(r=>r.possibleGap),legacyEventsNotCounted:true,blockedTouchCoverage:'Disabled buttons may suppress pointer events, readiness transitions are recorded independently',browserScope:'Only this browser profile on this device; other devices require their own export',cloudflareScope:'Remote presentation calls from all paired devices, grouped by presentation and diagnostic test ID'},
+    reasonLegend:SEND_REASON_LABELS,browser:{totals,days,actions:mergeActions(sources.map(s=>s.actions))},cloudflare:remote,tests:reports,events};
 }
 export function diagnosticSummary() {
   const report=diagnosticReport(), test=currentDiagnosticTest(), latest=test?report.tests.find(t=>t.id===test.id):report.tests.at(-1);
