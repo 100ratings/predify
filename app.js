@@ -1,18 +1,18 @@
-import { sendBlockReasons } from './send-diagnostics.js?v=1.3.15';
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.15';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.15';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.15';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.15';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.15';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.15';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.15';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.15';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.15';
-import { preventZoom } from './zoom.js?v=1.3.15';
-import { watchAppUpdates } from './updates.js?v=1.3.15';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.15';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.15';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.15';
+import { sendBlockReasons } from './send-diagnostics.js?v=1.3.16';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.16';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.16';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.16';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.16';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.16';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.16';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.16';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.16';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.16';
+import { preventZoom } from './zoom.js?v=1.3.16';
+import { watchAppUpdates } from './updates.js?v=1.3.16';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.16';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.16';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.16';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -1240,6 +1240,19 @@ $('search-more').onclick = async () => {
 
 function paintDiagnostics() {
   const summary=diagnosticSummary();
+  const daily=spotifyDailyHistory(summary.report);
+  const current=daily.rows[0];
+  $('spotify-daily-total').textContent='API do Spotify hoje: '+current.total+' '+(current.total===1?'chamada':'chamadas');
+  $('spotify-daily-status').textContent=(remoteKey()&&!daily.observedAt?'Total parcial, aguardando a medição do monitor remoto':daily.observedAt?'Inclui o monitor remoto, última medição em '+new Date(daily.observedAt).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Chamadas feitas neste navegador')+
+    (summary.report.coverage.storageLimited?' · Não foi possível salvar todos os registros':'')+
+    (summary.report.coverage.remotePossibleGap?' · Pode haver lacuna após reinício do monitor':'');
+  const history=daily.rows.map(row=>{
+    const tr=document.createElement('tr');
+    const date=document.createElement('th');date.scope='row';date.textContent=row.day.split('-').reverse().join('/');
+    const count=document.createElement('td');count.textContent=row.total;
+    tr.append(date,count);return tr;
+  });
+  $('spotify-daily-rows').replaceChildren(...history);
   $('diagnostics-summary').textContent=summary.text;
   $('diagnostic-record-status').textContent = summary.active ? 'Registro em andamento, faça seu teste e finalize quando terminar' : summary.report.tests.length ? 'Registro salvo, você já pode exportar o diagnóstico' : 'Os registros ficam salvos neste aparelho';
   $('diagnostic-begin').disabled=summary.active || remoteState.active || remoteUnknown;

@@ -1,6 +1,6 @@
-import { SEND_REASON_LABELS } from './send-diagnostics.js?v=1.3.15';
-import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.15';
-import { metricKey,metricDay,countAttempt,countResult,mergeMetrics,metricCount } from './request-metrics.js?v=1.3.15';
+import { SEND_REASON_LABELS } from './send-diagnostics.js?v=1.3.16';
+import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.16';
+import { metricKey,metricDay,countAttempt,countResult,mergeMetrics,metricCount } from './request-metrics.js?v=1.3.16';
 const LEGACY_KEY='predify.diagnostics.v1', PREFIX='predify.diagnostics.v2.',TESTS_KEY='predify.diagnostic-tests.v2',REMOTE_KEY='predify.remote-metrics.v2';
 const LIMIT=2000, RETENTION_MS=14*86400000;
 const uuid=()=>globalThis.crypto?.randomUUID?.() || Date.now().toString(16)+'-'+Math.random().toString(16).slice(2);
@@ -108,13 +108,29 @@ export function diagnosticReport() {
     browser:mergeMetrics(...sources.map(s=>s.tests?.[t.id])),actions:mergeActions(sources.map(s=>s.testActions?.[t.id])),cloudflare:mergeMetrics(...(remote?.runs||[]).filter(r=>r.testId===t.id).map(r=>r.metrics))}));
   const legacy=read(LEGACY_KEY,[]);
   const events=[...(Array.isArray(legacy)?legacy:[]),...sources.flatMap(s=>s.events||[])].filter(e=>e&&Number.isFinite(e.at)).sort((a,b)=>a.at-b.at).slice(-LIMIT).map(e=>cleanEvent(e.event,e,e.at));
-  return {schema:2,app:'Predify',version:APP_VERSION,build:BUILD_ID,exportedAt:new Date().toISOString(),timezone:'America/Sao_Paulo',retentionDays:14,limit:LIMIT,
+  const report={schema:2,app:'Predify',version:APP_VERSION,build:BUILD_ID,exportedAt:new Date().toISOString(),timezone:'America/Sao_Paulo',retentionDays:14,limit:LIMIT,
     coverage:{since:Math.min(ledger.since,...sources.map(s=>s.since||ledger.since)),storageLimited,meaning:'HTTP attempts initiated by Predify, not quota units or proof of receipt by Spotify',remoteSnapshotAvailable:!!remote,remotePossibleGap:!!remote?.runs.some(r=>r.possibleGap),legacyEventsNotCounted:true,blockedTouchCoverage:'Disabled buttons may suppress pointer events, readiness transitions are recorded independently',browserScope:'Only this browser profile on this device; other devices require their own export',cloudflareScope:'Remote presentation calls from all paired devices, grouped by presentation and diagnostic test ID'},
     reasonLegend:SEND_REASON_LABELS,browser:{totals,days,actions:mergeActions(sources.map(s=>s.actions))},cloudflare:remote,tests:reports,events};
+  report.spotifyDaily=spotifyDailyHistory(report);
+  return report;
 }
 export function diagnosticSummary() {
   const report=diagnosticReport(), test=currentDiagnosticTest(), latest=test?report.tests.find(t=>t.id===test.id):report.tests.at(-1);
   const scope=latest?.browser||report.browser.days[metricDay()]||{};
   const remote=latest?.cloudflare||report.cloudflare?.days?.[metricDay()]||{};
   return {active:!!test,report,local:scope,remote,text:(test?'Registro em andamento':latest?'Último registro':'Hoje neste aparelho')+'\nSpotify no aparelho: '+metricCount(scope,'spotify')+' chamadas\nAutorização Spotify no aparelho: '+metricCount(scope,'spotify-auth')+' chamadas\nInject no aparelho: '+metricCount(scope,'inject')+' chamadas\nControle Cloudflare: '+metricCount(scope,'cloudflare-control')+' chamadas\nSpotify na Cloudflare: '+(report.cloudflare?metricCount(remote,'spotify'):'sem medição')+'\nInject na Cloudflare: '+(report.cloudflare?metricCount(remote,'inject'):'sem medição')+'\nHoje, Spotify neste aparelho: '+metricCount(report.browser.days[metricDay()]||{},'spotify')+' chamadas'+'\nHoje, Spotify na Cloudflare: '+(report.cloudflare?metricCount(report.cloudflare.days[metricDay()]||{},'spotify'):'sem medição')+'\nLeituras da cópia salva neste registro: '+Object.entries(latest?.actions||{}).filter(([k])=>k.startsWith('cache-hit|')).reduce((n,[,v])=>n+v,0)+'\nPausas locais neste registro: '+Object.entries(latest?.actions||{}).filter(([k])=>k.startsWith('cooldown-blocked|')).reduce((n,[,v])=>n+v,0)};
+}
+
+// Calendar-day totals are independent of diagnostic test sessions and server snapshots
+// are already replaced, not accumulated, by updateRemoteDiagnostics
+export function spotifyDailyHistory(report, at=Date.now()) {
+  const today=metricDay(at), cutoff=metricDay(at-13*86400000);
+  const keys=[...new Set([today,...Object.keys(report.browser?.days||{}),...Object.keys(report.cloudflare?.days||{})])]
+    .filter(day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&day>=cutoff&&day<=today).sort().reverse();
+  return {today,observedAt:report.cloudflare?.observedAt||null,
+    rows:keys.map(day=>{
+      const browser=metricCount(report.browser?.days?.[day],'spotify');
+      const remote=report.cloudflare?metricCount(report.cloudflare.days?.[day],'spotify'):null;
+      return {day,browser,remote,total:browser+(remote??0)};
+    })};
 }

@@ -57,3 +57,7 @@ Poll remote status every 60 seconds when confirmed inactive, retain 2.5 seconds 
 Record fixed, allowlisted send-block reasons and readiness transitions without changing send guards or recording words, playlist identity or raw error messages
 Force a readiness snapshot when a diagnostic test begins, do not count these local events as HTTP calls
 Disabled-button pointer events are best effort, never imply a missing pointer event proves the user did not try to send
+
+Keep the daily Spotify Web API counter independent of diagnostic test recording, sum only spotify attempts from this browser and the latest remote daily snapshot
+Exclude spotify-auth, Inject and Cloudflare control calls, preserve daily history for the last 14 calendar days with midnight in America/Sao_Paulo
+Expose the daily history in Diagnóstico and exports without new network requests, show remote measurement time and missing or limited coverage rather than claiming complete account-wide totals

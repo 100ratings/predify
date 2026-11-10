@@ -64,3 +64,33 @@ test('unavailable-send logging allows only fixed reason codes and does not incre
  assert.equal(r.reasonLegend['sequence-empty'],'A sequência não contém músicas para enviar');
  d.endDiagnosticTest();
 });
+
+test('daily Spotify history filters other services, sums attempts once and rolls over at Brasilia midnight',async()=>{
+ const {spotifyDailyHistory}=await import('../diagnostics.js');
+ const report={browser:{days:{'2026-11-10':{
+  'spotify|playlist-items|PUT':{attempts:2,responses:2,itemsSubmitted:40},
+  'spotify|playlists|GET':{attempts:1,httpErrors:1},
+  'spotify-auth|token|POST':{attempts:4},'inject|selection|GET':{attempts:200},
+  'cloudflare-control|status|GET':{attempts:30}},'2026-10-27':{'spotify|profile|GET':{attempts:99}}}},
+  cloudflare:{observedAt:123,days:{'2026-11-10':{'spotify|playlist-items|PUT':{attempts:3},'inject|selection|GET':{attempts:900}}}}};
+ let daily=spotifyDailyHistory(report,Date.parse('2026-11-11T02:59:59Z'));
+ assert.equal(daily.today,'2026-11-10');assert.equal(daily.rows.length,1);
+ assert.deepEqual(daily.rows[0],{day:'2026-11-10',browser:3,remote:3,total:6});
+ daily=spotifyDailyHistory(report,Date.parse('2026-11-11T03:00:00Z'));
+ assert.deepEqual(daily.rows[0],{day:'2026-11-11',browser:0,remote:0,total:0});
+ assert.equal(daily.rows[1].total,6);
+ assert.equal(spotifyDailyHistory(report,Date.parse('2026-11-11T03:00:00Z')).rows[1].total,6);
+ const partial=spotifyDailyHistory({browser:report.browser,cloudflare:null},Date.parse('2026-11-10T12:00:00Z'));
+ assert.equal(partial.observedAt,null);assert.equal(partial.rows[0].remote,null);assert.equal(partial.rows[0].total,3);
+});
+
+test('daily attempts persist without starting a test and survive reopening',async()=>{
+ const d=await import('../diagnostics.js?automatic-daily');
+ assert.equal(d.currentDiagnosticTest(),null);
+ const before=d.diagnosticReport().spotifyDaily.rows[0].total;
+ const request=d.beginDiagnosticRequest('spotify','search');d.finishDiagnosticRequest(request,500);
+ d.recordDiagnostic('cache-hit',{operation:'playlist-switch',apiCalls:0});
+ const reopened=await import('../diagnostics.js?automatic-daily-reopened');
+ assert.equal(reopened.diagnosticReport().spotifyDaily.rows[0].total,before+1);
+ assert.equal(reopened.diagnosticReport().tests.some(t=>!t.endedAt),false);
+});

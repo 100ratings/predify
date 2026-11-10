@@ -13,15 +13,15 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://i.scdn.co https://mosaic.scdn.co data:; connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://11z.co https://predify-inject-lab.omentalistademian.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Predify</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.3.15">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.3.15">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.3.15">
-<link rel="stylesheet" href="style.css?v=1.3.15">
-<script type="module" src="app.js?v=1.3.15"></script>
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.3.16">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.3.16">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.3.16">
+<link rel="stylesheet" href="style.css?v=1.3.16">
+<script type="module" src="app.js?v=1.3.16"></script>
 </head>
 <body>
 <div id="app">
-<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.3.15" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
+<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.3.16" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
 <main id="scroll-area">
 <section id="perform-view" class="view active" aria-labelledby="perform-title">
 <div class="heading"><p class="eyebrow">SUA PRÓXIMA EXPERIÊNCIA</p><h1 id="perform-title">Uma coincidência musical<span class="green">,</span></h1><div class="perform-subline"><p class="subtle">Uma playlist, mais do que parece</p></div></div>
@@ -94,6 +94,15 @@
 </details>
 <section class="settings-card"><h2>Seu catálogo</h2><p class="subtle">Catálogo e ajustes ficam salvos neste aparelho, exporte uma cópia para guardar ou levar a outro</p><div class="button-row"><button id="export" class="secondary">Exportar catálogo ↓</button><button id="import" class="secondary">Importar catálogo ↑</button><button id="cancel-import" class="secondary" type="button" hidden>Cancelar importação</button><input id="import-file" type="file" accept="application/json,.json" hidden></div><p id="import-status" class="small subtle" role="status" aria-live="polite">Exporte suas escolhas para guardar uma cópia, importe um arquivo de até cinco músicas por letra quando desejar, as sugestões aparecem automaticamente na aba Catálogo</p><p class="small subtle">A cópia não inclui sua conexão nem credenciais do Spotify</p></section>
 <section class="settings-card" aria-labelledby="diagnostic-title"><h2 id="diagnostic-title">Diagnóstico</h2>
+<div class="spotify-daily">
+<p id="spotify-daily-total" class="spotify-daily-total" role="status">API do Spotify hoje: 0 chamadas</p>
+<p class="small subtle">Contagem automática, sem iniciar registro de teste, o dia muda à meia-noite de Brasília</p>
+<p id="spotify-daily-status" class="small subtle"></p>
+<details id="spotify-daily-history" class="diagnostic-advanced"><summary>Histórico diário, últimos 14 dias</summary>
+<table class="spotify-daily-table"><thead><tr><th scope="col">Dia</th><th scope="col">Chamadas ao Spotify</th></tr></thead><tbody id="spotify-daily-rows"></tbody></table>
+<p class="small subtle">Soma as chamadas deste navegador e as do monitor remoto, chamadas feitas em outros navegadores ou aparelhos precisam do diagnóstico deles</p>
+<p class="small subtle">Inclui tentativas com erro e repetições, exclui Inject, controle do monitor e renovação de autorização, esta contagem não indica quando o limite do Spotify será renovado</p>
+</details></div>
 <p class="subtle">Se algo estranho acontecer, registre o teste e envie o arquivo para análise</p>
 <p class="small subtle">Inicie o registro antes do teste, ao terminar, encerre a apresentação e finalize o registro</p>
 <div class="button-row diagnostic-buttons"><button id="diagnostic-begin" class="secondary" type="button">Iniciar registro de teste</button><button id="diagnostic-end" class="secondary" type="button" disabled>Finalizar registro</button><button id="export-diagnostics" class="secondary" type="button">Exportar diagnóstico</button></div>
@@ -105,7 +114,7 @@
 <p class="small subtle">O teste consulta apenas o Inject, sem alterar suas músicas</p>
 <p class="small subtle">Até 2000 eventos recentes e contadores com retenção de 14 dias neste aparelho, sem tokens, chaves, palavras ou catálogo, a exportação busca os dados mais recentes do monitor remoto</p>
 </details></section>
-<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.3.15</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
+<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.3.16</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
 </div>
 </section>
 </main>
