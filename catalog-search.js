@@ -1,4 +1,4 @@
-import { letters, cleanTrack } from './engine.js?v=1.3.13';
+import { letters, cleanTrack } from './engine.js?v=1.3.14';
 export const SEARCH_PAGE_SIZE = 5;
 export function searchPage(tracks, page = 0) {
   const index = Math.max(0, Number.isInteger(page) ? page : 0) * SEARCH_PAGE_SIZE;

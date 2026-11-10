@@ -121,3 +121,5 @@ html,body,body *{touch-action:pan-x pan-y}
 #remote-start,#remote-stop{border-radius:30px;justify-content:center;font-size:15px;font-weight:750}
 
 .diagnostic-buttons{margin-top:16px}.diagnostic-buttons button{flex:1;min-width:140px}.diagnostic-advanced{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}.diagnostic-advanced summary{cursor:pointer;font-size:13px;color:#a8b9ae;min-height:34px;display:list-item;list-style-position:inside}.diagnostic-advanced pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:14px 0}.diagnostic-advanced .secondary{margin:14px 0 10px}#diagnostic-record-status{margin-top:14px}
+
+.opening-settings>summary{cursor:pointer;list-style:none;min-height:44px}.opening-settings>summary::-webkit-details-marker{display:none}.opening-settings>summary::before{content:"›";font-size:25px;line-height:1;color:var(--muted);transition:transform .15s}.opening-settings[open]>summary::before{transform:rotate(90deg)}.opening-settings>summary h2{flex:1}.opening-settings[open]>summary{margin-bottom:12px}
