@@ -1,16 +1,17 @@
-import { recordDiagnostic, diagnosticReport } from './diagnostics.js?v=1.3.9';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.9';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.9';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.9';
-import { api, auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.9';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.9';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.9';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.9';
-import { preventZoom } from './zoom.js?v=1.3.9';
-import { watchAppUpdates } from './updates.js?v=1.3.9';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.9';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.9';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.9';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.10';
+import { recordDiagnostic, diagnosticReport } from './diagnostics.js?v=1.3.10';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.10';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.10';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.10';
+import { api, auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.10';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.10';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.10';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.10';
+import { preventZoom } from './zoom.js?v=1.3.10';
+import { watchAppUpdates } from './updates.js?v=1.3.10';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.10';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.10';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.10';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -52,6 +53,7 @@ function loadData() {
 let data = loadData();
 let lastSuccessfulSend = loadLastSuccess();
 let selectedLetter = 'A';
+const playlistCache = createPlaylistCache();
 let playlists = [];
 let sequence = { tracks: [], missing: [], error: '' };
 let sending = false;
@@ -158,16 +160,38 @@ function paintPlaylist() {
   $('playlist-meta').textContent = selected ? `${selected.items?.total ?? selected.tracks?.total ?? 0} ${(selected.items?.total ?? selected.tracks?.total ?? 0) === 1 ? 'música' : 'músicas'} · ${selected.public === true ? 'Pública' : selected.public === false ? 'Privada' : 'Sua playlist'}` : auth() ? 'Escolha uma playlist criada por você' : 'Conecte sua conta em Ajustes';
   updateButton();
 }
+function restoreSavedPlaylists() {
+  playlistCache.reload();
+  playlistRequest++;
+  playlists = auth() ? playlistCache.list() : [];
+  if (auth() && data.playlist && !playlists.some(p=>p.id === data.playlist)) {
+    playlists.push({id:data.playlist,name:'Playlist salva'});
+  }
+  $('playlist').replaceChildren(new Option(auth() ? 'Selecione uma playlist, use ↻ para buscar novas' : 'Conecte o Spotify',''));
+  playlists.forEach(p=>$('playlist').append(new Option(p.name,p.id)));
+  $('playlist').value = data.playlist;
+  const saved = auth() ? playlistCache.details(data.playlist) : null;
+  playlistItems = saved?.items || []; playlistLoadedFor = saved ? data.playlist : '';
+  playlistLoading = false;
+  $('playlist-cache-status').textContent = auth() ? 'Dados salvos no aparelho, use ↻ para buscar mudanças no Spotify' : '';
+  paintAccount(auth() ? playlistCache.profile() : null); paintPlaylist();
+}
+function saveCurrentPlaylistCache(selected,items) {
+  if (!playlistCache.saveDetails(selected,items)) {
+    $('playlist-cache-status').textContent = 'Playlist carregada, não foi possível guardar todas as músicas no aparelho';
+  }
+}
 async function loadPlaylists() {
   if (loadingLists || !auth()) return;
   loadingLists = true; updateButton();
   try {
-    const result = await myPlaylists(); playlists = result.items; paintAccount(result.me);
+    const result = await myPlaylists(); playlists = result.items;
+    spotifyConnectionError = ''; paintAccount(result.me); playlistCache.saveList(playlists,result.me);
     $('playlist').replaceChildren(new Option('Selecione uma playlist', ''));
     playlists.forEach(playlist => $('playlist').append(new Option(playlist.name, playlist.id)));
     if (!playlists.some(playlist => playlist.id === data.playlist)) data.playlist = '';
     $('playlist').value = data.playlist;
-    persist(); paintPlaylist(); await refreshPlaylistItems();
+    persist(); paintPlaylist(); await refreshPlaylistItems({ force:true });
     if (!playlists.length) toast('Crie uma playlist na sua conta do Spotify e toque em recarregar');
   } catch (error) {
     spotifyConnectionError = 'Não foi possível carregar suas playlists: ' + error.message;
@@ -588,6 +612,7 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
     // Manual mode also keeps its separate backup and post-write verification
     playlistItems = sent;
     playlistLoadedFor = target;
+    saveCurrentPlaylistCache(selected,sent);
     paintPlaylist();
     return true;
   } catch (error) {
@@ -625,13 +650,14 @@ $('disconnect').onclick = async () => {
     finally { remoteBusy = false; updateButton(); }
   }
   disconnect();
+  playlistCache.clear();
   playlists = []; playlistItems = []; playlistLoadedFor = '';
   $('playlist').replaceChildren(new Option('Conecte o Spotify', ''));
   paintAccount(); paintPlaylist();
   toast('Spotify desconectado deste aparelho, seu catálogo foi mantido');
 };
 $('account-shortcut').onclick = () => setView('settings');
-$('reload-playlists').onclick = loadPlaylists;
+$('reload-playlists').onclick = () => loadPlaylists();
 $('playlist').onchange = () => { data.playlist = $('playlist').value; persist(); paintPlaylist(); refreshPlaylistItems(); injectMonitor.resume(); };
 $('person-name').oninput = () => renderPreview();
 $('person-name').addEventListener('keydown', event => {
@@ -972,11 +998,17 @@ window.addEventListener('pageshow', () => {
 document.addEventListener('visibilitychange', () => { applyViewport(); if (!document.hidden) { paintAccount(); injectMonitor.resume(); } });
 window.addEventListener('online', () => injectMonitor.resume());
 window.addEventListener('scroll', () => { if (window.scrollY) window.scrollTo(0, 0); }, { passive: true });
-window.addEventListener('storage', event => { if (event.key === DATA_KEY) { data = loadData(); openingPosition = null; paintCatalog(); paintOpeningSummary(); renderPreview(); } if (event.key === LAST_SUCCESS_KEY) { lastSuccessfulSend = loadLastSuccess(); paintLastSuccessfulWord(); } if (event.key === 'predify.auth.v1') { paintAccount(); if (auth()) loadPlaylists(); } });
-async function refreshPlaylistItems() {
+window.addEventListener('storage', event => { if (event.key === DATA_KEY) { data = loadData(); openingPosition = null; paintCatalog(); paintOpeningSummary(); renderPreview(); } if (event.key === LAST_SUCCESS_KEY) { lastSuccessfulSend = loadLastSuccess(); paintLastSuccessfulWord(); } if (event.key === 'predify.auth.v1' || event.key === PLAYLIST_CACHE_KEY) restoreSavedPlaylists(); });
+async function refreshPlaylistItems({ force = false } = {}) {
   const selectedId = data.playlist, request = ++playlistRequest;
   playlistItems = []; playlistLoadedFor = '';
   if (!selectedId || !auth()) { playlistLoading = false; updateButton(); return; }
+  const saved = !force && playlistCache.details(selectedId);
+  if (saved) {
+    playlistItems = saved.items; playlistLoadedFor = selectedId; playlistLoading = false;
+    $('playlist-cache-status').textContent = 'Dados salvos no aparelho, use ↻ para buscar mudanças no Spotify';
+    paintPlaylist(); return;
+  }
   playlistLoading = true; updateButton();
   try {
     const [items, images] = await Promise.all([
@@ -990,6 +1022,8 @@ async function refreshPlaylistItems() {
       selected.items = { total: items.length };
       selected.coverUrl = images[0]?.url || '';
       selected.firstAlbumUrl = items.find(item => item.album?.images?.length)?.album?.images?.at(-1)?.url || '';
+      $('playlist-cache-status').textContent = 'Dados consultados no Spotify e salvos neste aparelho';
+      saveCurrentPlaylistCache(selected,items);
       paintPlaylist();
     }
   } catch (error) {
@@ -1193,15 +1227,17 @@ async function start() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
   paintCatalog(); paintOpeningSummary(); renderPreview(); paintAccount();
   const initialView = location.hash.slice(1);
+  let connected = false;
   try {
-    const connected = await finishLogin();
-    if (connected) { spotifyConnectionError = ''; toast('Spotify conectado, sua sessão será mantida neste aparelho'); }
+    connected = await finishLogin();
+    if (connected) { playlistCache.clear(); spotifyConnectionError = ''; toast('Spotify conectado, sua sessão será mantida neste aparelho'); }
   } catch (error) {
     spotifyConnectionError = error.message;
     toast(spotifyConnectionError, true);
   }
   paintAccount(); setView(initialView || 'perform');
-  if (auth()) await loadPlaylists();
+  restoreSavedPlaylists();
+  if (connected && auth()) await loadPlaylists();
   injectMonitor.setId(validInjectId(injectIdInput.value) ? injectIdInput.value : '');
   const url = new URL(location.href);
   if (url.searchParams.has('app-update')) { url.searchParams.delete('app-update'); history.replaceState(null, '', url.pathname + url.search + url.hash); }

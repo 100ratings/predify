@@ -37,3 +37,8 @@ The final keyboard-open position was calibrated on an iPhone as +10 px below the
 Apply this offset only while the iOS keyboard is open and the manual word input is focused, without any temporary overlay or saved calibration state
 Keep the composer bottom measurement independent from the translation so reopening the keyboard never cancels the chosen offset
 Keep Inject polling, Spotify actions, all other input fields and the keyboard-closed layout unchanged
+
+Playlist metadata and up to five playlists of cached contents are saved locally, never fetch Spotify playlists automatically on a normal app launch or token refresh
+Only an explicit reload, first selection without cached contents, or a completed new OAuth connection should fetch playlist data
+Keep manual send backup and verification fresh, cache updates only after an acknowledged write, clear the cache on disconnect or completed new OAuth connection
+Cached playlist names, contents and covers may be stale until explicit reload, indicate this in the UI
