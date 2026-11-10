@@ -1,6 +1,7 @@
-import { spotifyId, cleanTrack } from './engine.js?v=1.3.7';
-import { candidateScore } from './catalog-import.js?v=1.3.7';
-import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.7';
+import { recordDiagnostic, spotifyOperation } from './diagnostics.js?v=1.3.8';
+import { spotifyId, cleanTrack } from './engine.js?v=1.3.8';
+import { candidateScore } from './catalog-import.js?v=1.3.8';
+import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.8';
 export const CLIENT_ID = 'ea812e9b0ada47778150c48b62bf02ee';
 export const SCOPES = ['playlist-modify-public', 'playlist-modify-private', 'playlist-read-private'];
 const KEY = 'predify.auth.v1';
@@ -63,18 +64,53 @@ export async function accessToken(force = false) {
   if (!refreshInFlight) refreshInFlight = tokenRequest({ grant_type: 'refresh_token', refresh_token: current.refresh_token, client_id: CLIENT_ID }).then(data => saveAuth(data, current).access_token).finally(() => { refreshInFlight = null; });
   return refreshInFlight;
 }
+const COOLDOWN_KEY = 'predify.spotify.cooldown.v1';
+function spotifyCooldown() {
+  try { return JSON.parse(localStorage.getItem(COOLDOWN_KEY)) || {}; } catch { return {}; }
+}
+function cooldownError(state) {
+  const seconds = Math.max(1, Math.ceil((state.until - Date.now()) / 1000));
+  const duration = seconds >= 60 ? Math.ceil(seconds / 60) + ' min' : seconds + ' s';
+  const kind = state.reason === 'QUOTA_EXCEEDED' ? 'Cota de consultas do Spotify atingida' : 'Spotify limitou temporariamente as consultas';
+  const error = new Error(kind + ', ' + (state.reported ? 'aguarde ' : 'nova tentativa em ') + duration + (state.reported ? ' (prazo informado pelo Spotify)' : ' (prazo não informado pelo Spotify)'));
+  error.retryAfter = seconds;
+  error.status = 429;
+  error.reason = state.reason || '';
+  return error;
+}
 export async function api(path, options = {}, retry = true) {
   if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Caminho da API inválido');
+  const cooldown = spotifyCooldown();
+  if (cooldown.until > Date.now()) {
+    recordDiagnostic('spotify-wait',{operation:spotifyOperation(path),retryAfter:Math.ceil((cooldown.until-Date.now())/1000),reason:cooldown.reason,reported:cooldown.reported});
+    throw cooldownError(cooldown);
+  }
   const token = await accessToken();
-  const response = await fetch('https://api.spotify.com/v1' + path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: timeoutSignal() });
+  const currentCooldown = spotifyCooldown();
+  if (currentCooldown.until > Date.now()) throw cooldownError(currentCooldown);
+  const started = Date.now();
+  const method = options.method || 'GET';
+  let response;
+  try {
+    response = await fetch('https://api.spotify.com/v1' + path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: timeoutSignal() });
+  } catch (error) {
+    recordDiagnostic('spotify-network-error',{operation:spotifyOperation(path),method,ms:Date.now()-started});
+    throw error;
+  }
+  recordDiagnostic('spotify-response',{operation:spotifyOperation(path),method,status:response.status,ms:Date.now()-started});
   if (response.status === 401 && retry) { await accessToken(true); return api(path, options, false); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 429) {
-      const seconds = Number(response.headers.get('Retry-After'));
-      const error = new Error('Muitas solicitações ao Spotify');
-      error.retryAfter = Number.isFinite(seconds) && seconds >= 0 ? seconds : 15;
-      throw error;
+      const header = response.headers.get('Retry-After');
+      const seconds = header !== null && header.trim() !== '' ? Number(header) : NaN;
+      const reported = Number.isFinite(seconds) && seconds >= 0;
+      const state = { until: Date.now() + Math.max(1, reported ? seconds : 60) * 1000, reported, reason: data.error?.reason || '' };
+      const previous = spotifyCooldown();
+      if (previous.until > state.until) state.until = previous.until;
+      try { localStorage.setItem(COOLDOWN_KEY, JSON.stringify(state)); } catch { /* Storage may be unavailable */ }
+      recordDiagnostic('spotify-wait',{operation:spotifyOperation(path),method,status:429,retryAfter:Math.ceil((state.until-Date.now())/1000),reason:state.reason,reported});
+      throw cooldownError(state);
     }
     if (response.status === 403) throw new Error('O Spotify recusou o acesso, confira a conta Premium, as permissões e se a playlist é sua');
     if (response.status === 404) throw new Error('Música ou playlist não encontrada no Spotify');

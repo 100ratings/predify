@@ -1,15 +1,16 @@
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.7';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.7';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.7';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.7';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.7';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.7';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.7';
-import { preventZoom } from './zoom.js?v=1.3.7';
-import { watchAppUpdates } from './updates.js?v=1.3.7';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.7';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.7';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.7';
+import { recordDiagnostic, diagnosticReport } from './diagnostics.js?v=1.3.8';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.8';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.8';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.8';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.8';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.8';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.8';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.8';
+import { preventZoom } from './zoom.js?v=1.3.8';
+import { watchAppUpdates } from './updates.js?v=1.3.8';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.8';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.8';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation } from './remote.js?v=1.3.8';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -171,6 +172,11 @@ async function loadPlaylists() {
   } catch (error) {
     spotifyConnectionError = 'Não foi possível carregar suas playlists: ' + error.message;
     toast(spotifyConnectionError, true);
+    if (!playlists.length && data.playlist) {
+      $('playlist').replaceChildren(new Option('Playlist salva, consulta ao Spotify indisponível', data.playlist));
+    } else if (!playlists.length) {
+      $('playlist').replaceChildren(new Option('Playlists indisponíveis, confira o aviso', ''));
+    }
     paintAccount();
   }
   finally { loadingLists = false; updateButton(); }
@@ -578,15 +584,11 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
     $('last-send').append(node('br'), link);
     toast(inject ? 'Playlist atualizada pelo Inject' : verified ? 'Playlist atualizada e conferida no Spotify' : 'Spotify confirmou o envio, confira a playlist');
     selected.items = { total: sent.length };
-    if (inject) {
-      // The new playlist is known from the PUT, no unnecessary verification GET
-      playlistItems = sent;
-      playlistLoadedFor = target;
-      paintPlaylist();
-    } else {
-      paintPlaylist();
-      await refreshPlaylistItems();
-    }
+    // The acknowledged PUT already gives us the new contents, retain the cover
+    // Manual mode also keeps its separate backup and post-write verification
+    playlistItems = sent;
+    playlistLoadedFor = target;
+    paintPlaylist();
     return true;
   } catch (error) {
     toast(error.message + ' · Confira a playlist antes de repetir', true);
@@ -1157,7 +1159,16 @@ $('search-more').onclick = async () => {
   paintSearchResults();
 };
 
+$('export-diagnostics').onclick = () => {
+  const blob = new Blob([JSON.stringify(diagnosticReport(),null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = 'predify-diagnostico-' + new Date().toISOString().replace(/[:.]/g,'-') + '.json';
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url),60000);
+};
 async function start() {
+  recordDiagnostic('app-start');
   // Start update checks before any Spotify requests or complex UI initialization
   // A stalled OAuth callback must never leave the version label stuck
   watchAppUpdates({
