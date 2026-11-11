@@ -69,3 +69,6 @@ Do not migrate the legacy combined success into manual history because its origi
 
 Align all three last-word indicators to the manual composer's inner right edge at desktop and mobile widths
 Remote receipt is a separate gray bold line below remote status with the same typography as manual confirmation, long words wrap leftward within each indicator without horizontal overflow
+
+After an acknowledged manual send, clear the submitted manual input and render the empty preview, preserving both latest-success indicators
+On failure retain the manual input and preview, never clear a different draft typed during the request or touch the manual composer from Inject or remote sends

@@ -104,3 +104,39 @@ test('independent confirmations restore and render separately for the selected p
  assert.equal(f.context.$('last-success-word').hidden,true);
  assert.equal(f.context.$('last-manual-success-word').hidden,true);
 });
+
+test('manual composer clears only after acknowledgment and refreshes the empty preview',async()=>{
+ const f=fixture({snapshot_id:'confirmed'});
+ const input=f.context.$('person-name');input.value=' TEST ';
+ f.context.$('update').disabled=false;
+ let renders=0;f.context.renderPreview=()=>{renders++;f.context.sequence={tracks:[],error:'empty'};};
+ vm.runInContext(page.slice(page.indexOf("$('update').onclick ="),page.indexOf("$('connect').onclick =")),f.context);
+ assert.equal(await f.context.$('update').onclick(),true);
+ assert.equal(input.value,'');assert.equal(renders,1);
+ assert.equal(f.context.sequence.tracks.length,0);
+ assert.equal(f.context.lastManualSuccessfulSend.word,'TEST');
+ assert.deepEqual(f.methods,['GET','PUT']);
+});
+
+test('failed manual send preserves the word and preview for another attempt',async()=>{
+ const f=fixture({});f.context.$('person-name').value='TEST';f.context.$('update').disabled=false;
+ let renders=0;f.context.renderPreview=()=>{renders++;};
+ vm.runInContext(page.slice(page.indexOf("$('update').onclick ="),page.indexOf("$('connect').onclick =")),f.context);
+ assert.equal(await f.context.$('update').onclick(),false);
+ assert.equal(f.context.$('person-name').value,'TEST');assert.equal(renders,0);
+ assert.equal(f.context.sequence.tracks.length,1);
+});
+
+test('manual success never erases a newer draft typed while waiting for Spotify',async()=>{
+ const f=fixture({snapshot_id:'confirmed'});f.context.$('person-name').value='TEST';f.context.$('update').disabled=false;
+ const fetcher=global.fetch;
+ let release;const gate=new Promise(resolve=>{release=resolve;});
+ global.fetch=async(url,opts)=>{if(opts.method==='PUT')await gate;return fetcher(url,opts);};
+ let renders=0;f.context.renderPreview=()=>{renders++;};
+ vm.runInContext(page.slice(page.indexOf("$('update').onclick ="),page.indexOf("$('connect').onclick =")),f.context);
+ const pending=f.context.$('update').onclick();
+ f.context.$('person-name').value='NEXT';release();
+ assert.equal(await pending,true);
+ assert.equal(f.context.$('person-name').value,'NEXT');assert.equal(renders,0);
+ assert.equal(f.context.lastManualSuccessfulSend.word,'TEST');
+});

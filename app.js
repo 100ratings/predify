@@ -1,18 +1,18 @@
-import { sendBlockReasons } from './send-diagnostics.js?v=1.3.20';
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.20';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.20';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.20';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.20';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.20';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.20';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.20';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.20';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.20';
-import { preventZoom } from './zoom.js?v=1.3.20';
-import { watchAppUpdates } from './updates.js?v=1.3.20';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.20';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.20';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.20';
+import { sendBlockReasons } from './send-diagnostics.js?v=1.3.21';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.21';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.21';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.21';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.21';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.21';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.21';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.21';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.21';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.21';
+import { preventZoom } from './zoom.js?v=1.3.21';
+import { watchAppUpdates } from './updates.js?v=1.3.21';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.21';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.21';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.21';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -659,7 +659,14 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
 $('update').onclick = async () => {
   if (sending || playlistBusy || playlistLoading || $('update').disabled) {recordBlockedSend(false,sequence.tracks);return;}
   const submittedWord = $('person-name').value.trim();
-  return sendSequenceToSpotify(submittedWord, sequence.tracks);
+  const target = data.playlist;
+  const accepted = await sendSequenceToSpotify(submittedWord, sequence.tracks);
+  // Do not erase a new draft typed while Spotify was processing the previous word
+  if (accepted && data.playlist === target && $('person-name').value.trim() === submittedWord) {
+    $('person-name').value = '';
+    renderPreview();
+  }
+  return accepted;
 };
 $('connect').onclick = async () => {
   if ($('connect').disabled) return;
