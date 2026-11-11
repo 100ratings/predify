@@ -76,7 +76,7 @@ test('remote confirmation preserves manual history, ignores stale success and ne
  const {isNewRemoteConfirmation}=await import('../remote.js');
  const f=fixture({snapshot_id:'confirmed'});
  await f.send('MANUAL',[after]);
- Object.assign(f.context,{isNewRemoteConfirmation,remoteKey:()=>false,injectStatus:()=>{},lastRemoteStatusAt:0,remoteStatusFailed:false});
+ Object.assign(f.context,{rememberLastRemoteWord:()=>{},isNewRemoteConfirmation,remoteKey:()=>false,injectStatus:()=>{},lastRemoteStatusAt:0,remoteStatusFailed:false});
  const apply=vm.runInContext(page.slice(page.indexOf('function applyRemoteStatus('),page.indexOf('async function readRemoteStatus('))+'\napplyRemoteStatus',f.context);
  const at=f.context.lastSuccessfulSend.at;
  apply({active:true,lastValue:'RECEIVED'});

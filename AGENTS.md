@@ -72,3 +72,6 @@ Remote receipt is a separate gray bold line below remote status with the same ty
 
 After an acknowledged manual send, clear the submitted manual input and render the empty preview, preserving both latest-success indicators
 On failure retain the manual input and preview, never clear a different draft typed during the request or touch the manual composer from Inject or remote sends
+
+Persist the last nonempty remote receipt independently from presentation session state, starting, stopping or expiring a presentation must not clear it
+Restore the remote receipt on reopening, replace it only when status supplies another nonempty remote word, never promote it to an acknowledged Spotify success
