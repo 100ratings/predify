@@ -133,3 +133,6 @@ html,body,body *{touch-action:pan-x pan-y}
 .remote-card .remote-last-word{font-size:10px;font-weight:700;line-height:1.5;margin:8px calc(var(--confirmation-inset) - 21px) 0 0}
 .composer-footer>.last-success-word{min-width:0}
 @media(max-width:699px){.controls{--confirmation-inset:21px}}
+
+/* Reveal only after local settings and cached playlists have been painted */
+.app-starting #app{visibility:hidden}

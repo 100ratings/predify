@@ -75,3 +75,6 @@ On failure retain the manual input and preview, never clear a different draft ty
 
 Persist the last nonempty remote receipt independently from presentation session state, starting, stopping or expiring a presentation must not clear it
 Restore the remote receipt on reopening, replace it only when status supplies another nonempty remote word, never promote it to an acknowledged Spotify success
+
+On cold launch, startup.js sets the idle viewport before body parsing and holds the interface until synchronous local settings and playlist cache restoration finishes
+Reveal before awaiting OAuth or any remote response, keep the 3-second fail-open fallback and no-JavaScript visibility, do not add startup Spotify reads or alter the manual keyboard layout

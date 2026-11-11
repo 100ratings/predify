@@ -1,18 +1,18 @@
-import { sendBlockReasons } from './send-diagnostics.js?v=1.3.22';
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.22';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.22';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.22';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.22';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.22';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.22';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.22';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.22';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.22';
-import { preventZoom } from './zoom.js?v=1.3.22';
-import { watchAppUpdates } from './updates.js?v=1.3.22';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.22';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.22';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.22';
+import { sendBlockReasons } from './send-diagnostics.js?v=1.3.23';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.23';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.23';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.23';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.23';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.23';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.23';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.23';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.23';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.23';
+import { preventZoom } from './zoom.js?v=1.3.23';
+import { watchAppUpdates } from './updates.js?v=1.3.23';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.23';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.23';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.23';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -1332,6 +1332,10 @@ async function start() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
   paintCatalog(); paintOpeningSummary(); renderPreview(); paintAccount();
   const initialView = location.hash.slice(1);
+  setView(initialView || 'perform');
+  restoreSavedPlaylists();
+  applyViewport();
+  document.dispatchEvent(new Event('predify:ready'));
   let connected = false;
   try {
     connected = await finishLogin();
@@ -1340,8 +1344,8 @@ async function start() {
     spotifyConnectionError = error.message;
     toast(spotifyConnectionError, true);
   }
-  paintAccount(); setView(initialView || 'perform');
-  restoreSavedPlaylists();
+  if (connected) restoreSavedPlaylists();
+  else paintAccount(auth() ? playlistCache.profile() : null);
   if (connected && auth()) await loadPlaylists();
   injectMonitor.setId(validInjectId(injectIdInput.value) ? injectIdInput.value : '');
   const url = new URL(location.href);
@@ -1349,5 +1353,6 @@ async function start() {
 }
 start().catch(error => {
   console.error('Predify startup failed', error);
+  document.dispatchEvent(new Event('predify:ready'));
   try { toast('Falha na inicialização: ' + error.message, true); } catch { /* UI may be incomplete */ }
 });

@@ -33,7 +33,8 @@ test('cache never silently retains a truncated playlist, and unavailable storage
 test('ordinary startup and auth storage events restore cached playlists without fetching, cached switching returns before network reads',()=>{
   const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
   const startup=app.slice(app.indexOf('async function start() {'));
-  assert.match(startup,/restoreSavedPlaylists\(\);\s*if \(connected && auth\(\)\) await loadPlaylists\(\)/);
+  assert.ok(startup.indexOf('restoreSavedPlaylists();') < startup.indexOf('await finishLogin()'));
+  assert.match(startup,/if \(connected\) restoreSavedPlaylists\(\);/);
   assert.doesNotMatch(startup,/if \(auth\(\)\) await loadPlaylists\(\)/);
   assert.match(app,/event.key === 'predify.auth.v1' \|\| event.key === PLAYLIST_CACHE_KEY\) restoreSavedPlaylists\(\)/);
   const refresh=app.slice(app.indexOf('async function refreshPlaylistItems('),app.indexOf('function suggestionKey('));
