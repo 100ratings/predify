@@ -126,4 +126,10 @@ html,body,body *{touch-action:pan-x pan-y}
 
 .spotify-daily{margin:18px 0 24px;padding:18px;border:1px solid var(--line);border-radius:18px}.spotify-daily-total{font-size:18px;font-weight:750;color:var(--accent,#67e59b);margin:0 0 10px}.spotify-daily .small{margin:10px 0}.spotify-daily-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:12px}.spotify-daily-table th,.spotify-daily-table td{padding:10px 0;text-align:left;border-bottom:1px solid var(--line)}.spotify-daily-table td,.spotify-daily-table th:last-child{text-align:right}.spotify-daily-table tbody th{font-weight:400}
 
-.overall-success-word{display:block;margin:0 0 14px}.manual-success-word{color:var(--muted)}
+/* Match the manual composer's inner right edge, including its border */
+.controls{--confirmation-inset:24px;min-width:0}
+.overall-success-word{display:block;margin:0 var(--confirmation-inset) 14px;min-width:0}
+.manual-success-word{color:var(--muted)}
+.remote-card .remote-last-word{font-size:10px;font-weight:700;line-height:1.5;margin:8px calc(var(--confirmation-inset) - 21px) 0 0}
+.composer-footer>.last-success-word{min-width:0}
+@media(max-width:699px){.controls{--confirmation-inset:21px}}

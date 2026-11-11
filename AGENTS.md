@@ -66,3 +66,6 @@ Keep the green latest acknowledged Spotify word above the remote presentation, r
 Keep a separate persisted gray manual-only confirmation beside the manual initials, remote or local Inject events must never replace that manual history
 Only confirmed Spotify writes update success indicators, remote lastValue remains a separate receipt indicator
 Do not migrate the legacy combined success into manual history because its origin is unknown
+
+Align all three last-word indicators to the manual composer's inner right edge at desktop and mobile widths
+Remote receipt is a separate gray bold line below remote status with the same typography as manual confirmation, long words wrap leftward within each indicator without horizontal overflow

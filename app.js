@@ -1,18 +1,18 @@
-import { sendBlockReasons } from './send-diagnostics.js?v=1.3.19';
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.19';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.19';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.19';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.19';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.19';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.19';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.19';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.19';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.19';
-import { preventZoom } from './zoom.js?v=1.3.19';
-import { watchAppUpdates } from './updates.js?v=1.3.19';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.19';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.19';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.19';
+import { sendBlockReasons } from './send-diagnostics.js?v=1.3.20';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.20';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.20';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.20';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.20';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.20';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.20';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.20';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.20';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.20';
+import { preventZoom } from './zoom.js?v=1.3.20';
+import { watchAppUpdates } from './updates.js?v=1.3.20';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.20';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.20';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.20';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -769,8 +769,11 @@ function paintRemote() {
   } else if (remoteState.phase === 'expired') message = 'Apresentação encerrada automaticamente';
   else if (remoteState.phase === 'stopped') message = 'Apresentação encerrada';
   else if (remoteState.phase === 'daily-limit') message = 'Monitor encerrado pelo limite diário de segurança';
-  if (remoteState.lastValue) message += ' · Última recebida: '+remoteState.lastValue;
-  else if (remoteState.mode === 'test' && !remoteState.active && ['expired','stopped'].includes(remoteState.phase)) message += ' · Nenhuma palavra nova recebida neste teste';
+  const received = $('remote-last-word');
+  received.hidden = !remoteState.lastValue;
+  received.textContent = remoteState.lastValue ? 'Última: ' + remoteState.lastValue.toLocaleUpperCase('pt-BR') : '';
+  received.title = remoteState.lastValue ? 'Última palavra recebida pelo monitor remoto: ' + remoteState.lastValue : '';
+  if (!remoteState.lastValue && remoteState.mode === 'test' && !remoteState.active && ['expired','stopped'].includes(remoteState.phase)) message += ' · Nenhuma palavra nova recebida neste teste';
   if (remoteState.lastError) message += ' · '+remoteState.lastError;
   $('remote-status').textContent = remoteMessage || message;
 }
