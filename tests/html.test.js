@@ -146,9 +146,11 @@ test('disconnect requires explicit confirmation and cancellation preserves the S
   assert.match(html,/id="disconnect"[^>]+>Desconectar deste aparelho/);
 });
 
-test('last successful Spotify word is shown next to initials and saved only after PUT acknowledgment', () => {
+test('overall Spotify confirmation is above remote presentation and the manual confirmation stays next to initials', () => {
   const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
   assert.match(html, /id="last-success-word"[^>]*aria-live="polite" hidden/);
+  assert.ok(html.indexOf('id="last-success-word"') < html.indexOf('class="remote-card"'));
+  assert.ok(html.indexOf('class="composer-footer"') < html.indexOf('id="last-manual-success-word"'));
   assert.match(app, /const LAST_SUCCESS_KEY = 'predify\.last-success\.v1'/);
   assert.match(app, /lastSuccessfulSend\.playlist === data\.playlist/);
   assert.match(app, /lastSuccessfulSend\.word\.toLocaleUpperCase\('pt-BR'\)/);

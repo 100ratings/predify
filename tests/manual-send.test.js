@@ -16,7 +16,7 @@ function fixture(snapshot) {
  global.fetch=async(url,opts)=>{methods.push(opts.method||'GET');return Response.json(opts.method==='PUT'?snapshot:{items:[{item:before}],next:null});};
  const elements={};
  const context={sendBlockReasons,remoteBusy:false,remoteUnknown:false,remoteState:{active:false},sequence:{tracks:[after],error:''},lastManualReadiness:'',remoteOwnsPlaylist:()=>false,sending:false,playlistBusy:false,playlistLoading:false,importingCatalog:false,auth:()=>true,data:{playlist:id},playlists:[{id,name:'Test'}],recordDiagnostic:(name,details)=>events.push({name,...details}),updateButton:()=>{},playlistTracks,replacePlaylist,localStorage,
-  lastSuccessfulSend:null,LAST_SUCCESS_KEY:'test.last-success',paintLastSuccessfulWord:()=>{},playlistItems:[],playlistLoadedFor:'',
+  lastSuccessfulSend:null,LAST_SUCCESS_KEY:'test.last-success',lastManualSuccessfulSend:null,LAST_MANUAL_SUCCESS_KEY:'test.last-manual-success',paintLastSuccessfulWord:()=>{},playlistItems:[],playlistLoadedFor:'',
   $:id=>elements[id] ||= {append:()=>{}},node:()=>({}),toast:message=>notices.push(message),saveCurrentPlaylistCache:()=>{},paintPlaylist:()=>{}};
  vm.createContext(context);const send=vm.runInContext(source+'\nsendSequenceToSpotify',context);
  return {context,methods,notices,events,send};
@@ -27,6 +27,8 @@ test('manual send performs only fresh backup GET and acknowledged PUT, without p
  assert.deepEqual(f.methods,['GET','PUT']);
  assert.equal(JSON.parse(values.get('predify.last-backup')).uris[0],before.uri);
  assert.equal(f.context.lastSuccessfulSend.word,'TEST');
+ assert.equal(f.context.lastManualSuccessfulSend.word,'TEST');
+ assert.equal(JSON.parse(values.get('test.last-manual-success')).word,'TEST');
  assert.equal(f.context.playlistItems[0].uri,after.uri);
 });
 test('a PUT without a valid Spotify snapshot cannot mark the manual word as successful or retry the write',async()=>{
@@ -34,6 +36,7 @@ test('a PUT without a valid Spotify snapshot cannot mark the manual word as succ
  assert.equal(await f.send('TEST',[after]),false);
  assert.deepEqual(f.methods,['GET','PUT']);
  assert.equal(f.context.lastSuccessfulSend,null);
+ assert.equal(f.context.lastManualSuccessfulSend,null);
  assert.ok(f.notices.some(text=>text.includes('sem confirmação')));
 });
 
@@ -56,4 +59,48 @@ test('manual readiness logs transitions, not repeated paints, and never the word
  assert.deepEqual(Array.from(f.events[1].reasonCodes),['sequence-empty']);
  assert.equal(JSON.stringify(f.events).includes(id),false);
  assert.deepEqual(f.methods,[]);
+});
+
+test('local Inject updates overall success without replacing the saved manual success',async()=>{
+ const f=fixture({snapshot_id:'confirmed'});
+ await f.send('MANUAL',[after]);
+ const savedManual=values.get('test.last-manual-success');
+ assert.equal(await f.send('INJECT',[after],{inject:true}),true);
+ assert.equal(f.context.lastSuccessfulSend.word,'INJECT');
+ assert.equal(f.context.lastManualSuccessfulSend.word,'MANUAL');
+ assert.equal(values.get('test.last-manual-success'),savedManual);
+ assert.deepEqual(f.methods,['GET','PUT','PUT']);
+});
+
+test('remote confirmation preserves manual history, ignores stale success and never treats receipt as success',async()=>{
+ const {isNewRemoteConfirmation}=await import('../remote.js');
+ const f=fixture({snapshot_id:'confirmed'});
+ await f.send('MANUAL',[after]);
+ Object.assign(f.context,{isNewRemoteConfirmation,remoteKey:()=>false,injectStatus:()=>{},lastRemoteStatusAt:0,remoteStatusFailed:false});
+ const apply=vm.runInContext(page.slice(page.indexOf('function applyRemoteStatus('),page.indexOf('async function readRemoteStatus('))+'\napplyRemoteStatus',f.context);
+ const at=f.context.lastSuccessfulSend.at;
+ apply({active:true,lastValue:'RECEIVED'});
+ assert.equal(f.context.lastSuccessfulSend.word,'MANUAL');
+ apply({active:true,lastValue:'REMOTE',lastSuccess:{snapshotId:'confirmed',playlist:id,word:'REMOTE',at:at+1000}});
+ assert.equal(f.context.lastSuccessfulSend.word,'REMOTE');
+ assert.equal(f.context.lastManualSuccessfulSend.word,'MANUAL');
+ apply({active:false,lastSuccess:{snapshotId:'old',playlist:id,word:'OLD',at:at-1000}});
+ assert.equal(f.context.lastSuccessfulSend.word,'REMOTE');
+ assert.equal(JSON.parse(values.get('test.last-manual-success')).word,'MANUAL');
+});
+
+test('independent confirmations restore and render separately for the selected playlist',()=>{
+ const f=fixture({snapshot_id:'unused'});
+ const manual={playlist:id,word:'neide',at:1000},overall={playlist:id,word:'busca',at:2000};
+ values.set('test.last-success',JSON.stringify(overall));values.set('test.last-manual-success',JSON.stringify(manual));
+ Object.assign(f.context,{spotifyId:(value)=>value?.length===22?value:null});
+ const load=vm.runInContext(page.slice(page.indexOf('function loadLastSuccess('),page.indexOf('function loadData('))+'\nloadLastSuccess',f.context);
+ f.context.lastSuccessfulSend=load();f.context.lastManualSuccessfulSend=load('test.last-manual-success');
+ const paint=vm.runInContext(page.slice(page.indexOf('function paintLastSuccessfulWord('),page.indexOf('function node('))+'\npaintLastSuccessfulWord',f.context);
+ paint();
+ assert.equal(f.context.$('last-success-word').textContent,'✓ Última: BUSCA');
+ assert.equal(f.context.$('last-manual-success-word').textContent,'Última: NEIDE');
+ f.context.data.playlist='q'.repeat(22);paint();
+ assert.equal(f.context.$('last-success-word').hidden,true);
+ assert.equal(f.context.$('last-manual-success-word').hidden,true);
 });

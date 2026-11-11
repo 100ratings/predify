@@ -61,3 +61,8 @@ Disabled-button pointer events are best effort, never imply a missing pointer ev
 Keep the daily Spotify Web API counter independent of diagnostic test recording, sum only spotify attempts from this browser and the latest remote daily snapshot
 Exclude spotify-auth, Inject and Cloudflare control calls, preserve daily history for the last 14 calendar days with midnight in America/Sao_Paulo
 Expose the daily history in Diagnóstico and exports without new network requests, show remote measurement time and missing or limited coverage rather than claiming complete account-wide totals
+
+Keep the green latest acknowledged Spotify word above the remote presentation, right aligned, covering manual, local Inject and remote sends
+Keep a separate persisted gray manual-only confirmation beside the manual initials, remote or local Inject events must never replace that manual history
+Only confirmed Spotify writes update success indicators, remote lastValue remains a separate receipt indicator
+Do not migrate the legacy combined success into manual history because its origin is unknown

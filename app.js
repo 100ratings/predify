@@ -1,18 +1,18 @@
-import { sendBlockReasons } from './send-diagnostics.js?v=1.3.17';
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.17';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.17';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.17';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.17';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.17';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.17';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.17';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.17';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.17';
-import { preventZoom } from './zoom.js?v=1.3.17';
-import { watchAppUpdates } from './updates.js?v=1.3.17';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.17';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.17';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.17';
+import { sendBlockReasons } from './send-diagnostics.js?v=1.3.18';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.18';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.18';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.18';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.18';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.18';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.18';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.18';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.18';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.18';
+import { preventZoom } from './zoom.js?v=1.3.18';
+import { watchAppUpdates } from './updates.js?v=1.3.18';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.18';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.18';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.18';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -25,12 +25,13 @@ const remoteOwnsPlaylist = () => remoteBusy || remoteUnknown || remoteState.acti
 const $ = id => document.getElementById(id);
 const DATA_KEY = 'predify.data.v1';
 const LAST_SUCCESS_KEY = 'predify.last-success.v1';
+const LAST_MANUAL_SUCCESS_KEY = 'predify.last-manual-success.v1';
 // Screen wake-lock implementation is retained in keep-awake.js for future use
 // No wake lock is requested while its control is removed from the interface
 
-function loadLastSuccess() {
+function loadLastSuccess(key = LAST_SUCCESS_KEY) {
   try {
-    const item = JSON.parse(localStorage.getItem(LAST_SUCCESS_KEY));
+    const item = JSON.parse(localStorage.getItem(key));
     return item && spotifyId(item.playlist, 'playlist') && typeof item.word === 'string' && item.word.trim()
       ? { playlist: item.playlist, word: item.word.trim().slice(0, 100), at: Number.isFinite(item.at) ? item.at : 0 }
       : null;
@@ -55,6 +56,7 @@ function loadData() {
 }
 let data = loadData();
 let lastSuccessfulSend = loadLastSuccess();
+let lastManualSuccessfulSend = loadLastSuccess(LAST_MANUAL_SUCCESS_KEY);
 let selectedLetter = 'A';
 const playlistCache = createPlaylistCache();
 let playlists = [];
@@ -95,6 +97,11 @@ function paintLastSuccessfulWord() {
   indicator.hidden = !show;
   indicator.textContent = show ? '✓ Última: ' + lastSuccessfulSend.word.toLocaleUpperCase('pt-BR') : '';
   indicator.title = show ? 'Última palavra enviada com sucesso: ' + lastSuccessfulSend.word : '';
+  const manualIndicator = $('last-manual-success-word');
+  const showManual = !!lastManualSuccessfulSend && lastManualSuccessfulSend.playlist === data.playlist;
+  manualIndicator.hidden = !showManual;
+  manualIndicator.textContent = showManual ? 'Última: ' + lastManualSuccessfulSend.word.toLocaleUpperCase('pt-BR') : '';
+  manualIndicator.title = showManual ? 'Última palavra manual enviada com sucesso: ' + lastManualSuccessfulSend.word : '';
 }
 function node(tag, className, text) {
   const result = document.createElement(tag);
@@ -616,6 +623,11 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
     lastSuccessfulSend = { playlist: target, word: submittedWord, at: Date.now() };
     try { localStorage.setItem(LAST_SUCCESS_KEY, JSON.stringify(lastSuccessfulSend)); }
     catch { /* Keep the confirmation visible even if storage is full */ }
+    if (!inject) {
+      lastManualSuccessfulSend = { ...lastSuccessfulSend };
+      try { localStorage.setItem(LAST_MANUAL_SUCCESS_KEY, JSON.stringify(lastManualSuccessfulSend)); }
+      catch { /* Keep manual confirmation visible even when storage is full */ }
+    }
     paintLastSuccessfulWord();
     $('last-send').hidden = false;
     $('last-send').textContent = (
@@ -1041,7 +1053,7 @@ window.addEventListener('pageshow', () => {
 document.addEventListener('visibilitychange', () => { applyViewport(); if (!document.hidden) { paintAccount(); injectMonitor.resume(); } });
 window.addEventListener('online', () => injectMonitor.resume());
 window.addEventListener('scroll', () => { if (window.scrollY) window.scrollTo(0, 0); }, { passive: true });
-window.addEventListener('storage', event => { if (event.key === DATA_KEY) { data = loadData(); openingPosition = null; paintCatalog(); paintOpeningSummary(); renderPreview(); } if (event.key === LAST_SUCCESS_KEY) { lastSuccessfulSend = loadLastSuccess(); paintLastSuccessfulWord(); } if (event.key === 'predify.auth.v1' || event.key === PLAYLIST_CACHE_KEY) restoreSavedPlaylists(); });
+window.addEventListener('storage', event => { if (event.key === DATA_KEY) { data = loadData(); openingPosition = null; paintCatalog(); paintOpeningSummary(); renderPreview(); } if (event.key === LAST_SUCCESS_KEY || event.key === LAST_MANUAL_SUCCESS_KEY) { lastSuccessfulSend = loadLastSuccess(); lastManualSuccessfulSend = loadLastSuccess(LAST_MANUAL_SUCCESS_KEY); paintLastSuccessfulWord(); } if (event.key === 'predify.auth.v1' || event.key === PLAYLIST_CACHE_KEY) restoreSavedPlaylists(); });
 async function refreshPlaylistItems({ force = false } = {}) {
   const selectedId = data.playlist, request = ++playlistRequest;
   playlistItems = []; playlistLoadedFor = '';
