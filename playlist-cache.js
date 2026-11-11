@@ -1,4 +1,4 @@
-import { spotifyId } from './engine.js?v=1.3.18';
+import { spotifyId } from './engine.js?v=1.3.19';
 export const PLAYLIST_CACHE_KEY = 'predify.playlists.cache.v1';
 export function createPlaylistCache(storage = globalThis.localStorage) {
   let state = { me:null, items:[], details:{} };
