@@ -1,7 +1,7 @@
-import { recordDiagnostic, spotifyOperation, diagnosticFetch } from './diagnostics.js?v=1.3.23';
-import { spotifyId, cleanTrack } from './engine.js?v=1.3.23';
-import { candidateScore } from './catalog-import.js?v=1.3.23';
-import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.23';
+import { recordDiagnostic, spotifyOperation, diagnosticFetch } from './diagnostics.js?v=1.3.24';
+import { spotifyId, cleanTrack } from './engine.js?v=1.3.24';
+import { candidateScore } from './catalog-import.js?v=1.3.24';
+import { searchQuery, matchingTracks } from './catalog-search.js?v=1.3.24';
 export const CLIENT_ID = 'ea812e9b0ada47778150c48b62bf02ee';
 export const SCOPES = ['playlist-modify-public', 'playlist-modify-private', 'playlist-read-private'];
 const KEY = 'predify.auth.v1';
@@ -22,7 +22,7 @@ async function tokenRequest(body) {
     if (result.error === 'invalid_grant') {
       if (body.grant_type === 'refresh_token') {
         disconnect();
-        throw new Error('A sessão do Spotify expirou ou foi revogada, conecte novamente');
+        const error=new Error('A sessão do Spotify expirou ou foi revogada, conecte novamente');error.code='spotify-auth';throw error;
       }
       throw new Error('O código de autorização do Spotify expirou ou já foi utilizado, toque novamente em Conectar Spotify');
     }
@@ -107,9 +107,8 @@ export async function api(path, options = {}, retry = true) {
       recordDiagnostic('spotify-wait',{operation:spotifyOperation(path),method,status:429,retryAfter:Math.ceil((state.until-Date.now())/1000),reason:state.reason,reported});
       throw cooldownError(state);
     }
-    if (response.status === 403) throw new Error('O Spotify recusou o acesso, confira a conta Premium, as permissões e se a playlist é sua');
-    if (response.status === 404) throw new Error('Música ou playlist não encontrada no Spotify');
-    throw new Error(`Spotify ${response.status}: ${data.error?.message || 'não foi possível concluir'}`);
+    const message=response.status===403?'O Spotify recusou o acesso, confira a conta Premium, as permissões e se a playlist é sua':response.status===404?'Música ou playlist não encontrada no Spotify':`Spotify ${response.status}: ${data.error?.message || 'não foi possível concluir'}`;
+    const error=new Error(message);error.status=response.status;throw error;
   }
   return data;
 }

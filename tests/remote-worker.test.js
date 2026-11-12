@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../cloudflare/presentation.js',import.meta.url),'utf8')
   .replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject { constructor(ctx,env) { this.ctx=ctx; this.env=env; } }')
+  .replace("'../update-attempt.js'",JSON.stringify(new URL('../update-attempt.js',import.meta.url).href))
   .replace("'../request-metrics.js'",JSON.stringify(new URL('../request-metrics.js',import.meta.url).href))
   .replace("'../engine.js'",JSON.stringify(new URL('../engine.js',import.meta.url).href))
   .replace("'../inject.js'",JSON.stringify(new URL('../inject.js',import.meta.url).href));
@@ -84,10 +85,14 @@ test('ambiguous Spotify PUT after restart is not retried, new count is sent only
     assert.equal(JSON.stringify(f.state.presentation).includes('private-refresh'),false);
     await f.monitor.alarm();if(f.monitor.delivery)await f.monitor.delivery;
     assert.equal(puts,1);assert.equal(f.monitor.s.lastSuccess.snapshotId,'accepted');
+    assert.equal(f.monitor.status().lastAttempt.result,'confirmed');
+    assert.equal(f.monitor.status().lastAttempt.origin,'remote');
     await f.monitor.alarm();assert.equal(puts,1);
     f.state.presentation.pending={count:'2',value:'a',phase:'sending'};
+    f.state['last-update-attempt']={...f.monitor.lastAttempt,result:'pending'};
     const restarted=fixture(f.state);await restarted.ctx.ready;await restarted.monitor.alarm();
     assert.equal(puts,1);assert.match(restarted.monitor.s.lastError,/interrompido/);
+    assert.equal(restarted.monitor.status().lastAttempt.result,'interrupted');
     await restarted.monitor.fetch(request('stop',{}));
     const before=reads;await restarted.monitor.alarm();assert.equal(reads,before);
     assert.equal(restarted.monitor.s.sealedAuth,null);
@@ -148,6 +153,10 @@ test('Spotify Retry-After applies to newer Inject counts too',async()=>{
     await f.monitor.alarm();if(f.monitor.delivery)await f.monitor.delivery;
     assert.ok(reads>10);assert.equal(puts,1);assert.equal(f.monitor.s.lastSuccess,null);
     assert.ok(f.monitor.s.spotifyRetryAt>time);
+    assert.equal(f.monitor.status().lastAttempt.result,'rate-limit');
+    const lastAttempt=f.monitor.status().lastAttempt;
+    await f.monitor.fetch(request('stop',{}));
+    assert.deepEqual(f.monitor.status().lastAttempt,lastAttempt);
     await f.monitor.fetch(request('stop',{}));
   } finally {globalThis.fetch=realFetch;Date.now=realNow;globalThis.setTimeout=realTimer;}
 });
@@ -169,5 +178,28 @@ test('remote accounting counts retries and token calls separately, persists with
   assert.equal(diag.totals['spotify|playlist-items|PUT'].statuses[401],1);
   assert.equal(diag.runs[0].testId,f.monitor.s.config.diagnosticTestId);
   assert.equal(JSON.stringify(diag).includes('access_token'),false);
+ }finally{globalThis.fetch=original;}
+});
+
+test('remote attempt persists refusals and ambiguous writes without extra Spotify requests and survives a new test session',async()=>{
+ const {emptyCatalog}=await import('../engine.js');
+ const catalog=emptyCatalog();catalog.A[0]={id:'A'.repeat(22),uri:'spotify:track:'+'A'.repeat(22),name:'Anna Julia',artist:'Los Hermanos',image:''};
+ const original=globalThis.fetch;
+ try{
+  for(const scenario of [{status:403,result:'access'},{status:404,result:'not-found'},{status:500,result:'unknown-write'},{status:200,body:{},result:'unknown-write'},{network:true,result:'unknown-write'}]){
+   const f=fixture();await f.ctx.ready;const runId=crypto.randomUUID();
+   f.monitor.s={active:true,runId,mode:'live',startedAt:Date.now(),endsAt:Date.now()+60000,config:{catalog,playlist:'P'.repeat(22),opening:null},pending:{count:1,value:'a',phase:'queued'}};
+   f.monitor.token={access_token:'private',expires_at:Date.now()+3600000};
+   let calls=0;globalThis.fetch=async(url,options)=>{calls++;assert.equal(options.method,'PUT');if(scenario.network)throw new TypeError('private network error');return Response.json(scenario.body||{error:'private'}, {status:scenario.status});};
+   await f.monitor.send(runId);
+   assert.equal(calls,1);assert.equal(f.monitor.status().lastAttempt.result,scenario.result);
+   assert.equal(JSON.stringify(f.monitor.status().lastAttempt).includes('private'),false);
+   const restarted=fixture(f.state);await restarted.ctx.ready;
+   assert.equal(restarted.monitor.status().lastAttempt.result,scenario.result);
+   await restarted.monitor.fetch(request('stop',{}));
+   await restarted.monitor.fetch(request('start',{mode:'test',injectId:'5156',minutes:1}));
+   assert.equal(restarted.monitor.status().lastAttempt.result,scenario.result);
+   assert.equal(calls,1);
+  }
  }finally{globalThis.fetch=original;}
 });

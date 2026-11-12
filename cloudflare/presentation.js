@@ -1,3 +1,4 @@
+import { createUpdateAttempt, finishUpdateAttempt, cleanUpdateAttempt, updateAttemptError } from '../update-attempt.js';
 import { metricKey,metricDay,countAttempt,countResult } from '../request-metrics.js';
 import { DurableObject } from 'cloudflare:workers';
 import { buildSequence, validateCatalog, validateOpening, openingConflicts } from '../engine.js';
@@ -53,6 +54,7 @@ export class PresentationMonitor extends DurableObject {
     this.token = null;
     ctx.blockConcurrencyWhile(async () => {
       this.s = await ctx.storage.get('presentation') || {active:false,phase:'idle'};
+      this.lastAttempt = cleanUpdateAttempt(await ctx.storage.get('last-update-attempt'));
       this.budget = await ctx.storage.get('budget') || {day:'',attempts:0,activeMs:0};
       this.diag = await ctx.storage.get('diagnostics') || {schema:1,since:Date.now(),totals:{},days:{},runs:[]};
       if ((this.diag.pollCheckpointOpen || this.diag.spotifyCheckpointOpen) && this.s.runId) this.metricRun().possibleGap=true;
@@ -60,12 +62,16 @@ export class PresentationMonitor extends DurableObject {
       // A PUT interrupted by a restart has an unknown outcome, never repeat it automatically
       if (this.s.pending?.phase === 'sending') {
         this.s.lastError = 'Envio interrompido, confira a playlist antes de repetir';
+        if(this.lastAttempt?.result==='pending')this.lastAttempt=finishUpdateAttempt(this.lastAttempt,'interrupted');
         this.s.pending = null;
+        await this.save();
+      } else if(this.lastAttempt?.result==='pending') {
+        this.lastAttempt=finishUpdateAttempt(this.lastAttempt,'interrupted');
         await this.save();
       }
     });
   }
-  save() { return this.ctx.storage.put({presentation:this.s,budget:this.budget,diagnostics:this.diag}); }
+  save() { return this.ctx.storage.put({presentation:this.s,budget:this.budget,diagnostics:this.diag,'last-update-attempt':this.lastAttempt}); }
   metricRun() {
     let run=this.diag.runs.find(r=>r.id===this.s.runId);
     if(!run){run={id:this.s.runId,startedAt:this.s.startedAt||Date.now(),endedAt:0,testId:this.s.config?.diagnosticTestId||null,mode:this.s.mode||'test',possibleGap:false,metrics:{}};this.diag.runs.push(run);this.diag.runs=this.diag.runs.slice(-20);}
@@ -90,7 +96,7 @@ export class PresentationMonitor extends DurableObject {
   }
   status() {
     const s = this.s;
-    return {diagnostics:this.diag,active:s.active,phase:s.phase,mode:s.mode,playlist:s.config?.playlist || '',runId:s.runId,startedAt:s.startedAt,endsAt:s.endsAt,
+    return {updateAttemptSchema:1,lastAttempt:this.lastAttempt,diagnostics:this.diag,active:s.active,phase:s.phase,mode:s.mode,playlist:s.config?.playlist || '',runId:s.runId,startedAt:s.startedAt,endsAt:s.endsAt,
       polls:s.polls || 0,errors:s.errors || 0,changes:s.changes || 0,lastPollAt:s.lastPollAt,lastReadAt:s.lastReadAt,
       lastValue:s.lastValue || '',lastSuccess:s.lastSuccess || null,lastError:s.lastError || s.injectError || '',pending:!!s.pending,
       intervalMs:stats(s.intervals || []),fetchMs:stats(s.latencies || []),serverNow:Date.now(),dailyAttempts:this.budgetToday().attempts,authUpdatedAt:s.authUpdatedAt || 0,syncAvailable:!!s.syncAuth && s.syncUntil > Date.now()};
@@ -100,6 +106,7 @@ export class PresentationMonitor extends DurableObject {
     this.s.active = false;
     this.s.phase = reason;
     if(this.s.runId)this.metricRun().endedAt=Date.now();
+    if(this.lastAttempt?.result==='pending')this.lastAttempt=finishUpdateAttempt(this.lastAttempt,this.s.pending?.phase==='sending'?'interrupted':'cancelled');
     this.s.pending = null;
     if (this.s.sealedAuth) {
       this.s.syncAuth = this.s.sealedAuth;
@@ -158,6 +165,7 @@ export class PresentationMonitor extends DurableObject {
     if (!res.ok || !data.access_token) {
       const error = new Error('O Spotify precisa de uma nova conexão');
       error.fatal = res.status === 400 || res.status === 401 || res.status === 403;
+      if(error.fatal)error.code='spotify-auth';
       throw error;
     }
     this.token = {access_token:data.access_token,refresh_token:data.refresh_token || this.token.refresh_token,expires_at:Date.now()+data.expires_in*1000};
@@ -171,8 +179,10 @@ export class PresentationMonitor extends DurableObject {
       if (Date.now() < (this.s.spotifyRetryAt || 0)) return;
       const event = this.s.pending;
       if (event.retryAt && Date.now() < event.retryAt) return;
+      const attempt = createUpdateAttempt(event.value,'remote');
+      this.lastAttempt=attempt;
       const result = buildSequence({name:event.value,catalog:this.s.config.catalog,opening:this.s.config.opening});
-      if (result.error) { this.s.lastError = result.error; this.s.pending = null; await this.save(); continue; }
+      if (result.error) { this.lastAttempt=finishUpdateAttempt(attempt,'invalid-sequence'); this.s.lastError = result.error; this.s.pending = null; await this.save(); continue; }
       try {
         let access = await this.refreshToken();
         if (!this.s.active || this.s.runId !== runId) return;
@@ -193,18 +203,25 @@ export class PresentationMonitor extends DurableObject {
           this.s.spotifyRetryAt = event.retryAt;
           if (this.s.pending === event) this.s.pending = event;
           this.s.lastError = 'Spotify limitou os envios, aguardando o prazo solicitado';
+          this.lastAttempt=finishUpdateAttempt(attempt,'rate-limit',429);
           await this.save(); return;
         }
         if (res.status === 401 || res.status === 403) {
           const error = new Error('O Spotify recusou o acesso, reconecte a conta e confira a playlist');
-          error.fatal = true; throw error;
+          error.status=res.status;error.fatal = true; throw error;
         }
-        if (!res.ok || typeof body.snapshot_id !== 'string') throw new Error(res.ok ? 'Spotify respondeu sem confirmação da playlist' : 'Spotify HTTP '+res.status+', confira a playlist');
+        if (!res.ok || typeof body.snapshot_id !== 'string' || !body.snapshot_id) {
+          const error=new Error(res.ok ? 'Spotify respondeu sem confirmação da playlist' : 'Spotify HTTP '+res.status+', confira a playlist');
+          if(!res.ok)error.status=res.status;
+          throw error;
+        }
+        this.lastAttempt=finishUpdateAttempt(attempt,'confirmed',res.status);
         this.s.lastSuccess = {word:event.value,playlist:this.s.config.playlist,count:event.count,snapshotId:body.snapshot_id,at:Date.now()};
         this.s.lastError = '';
         this.s.spotifyRetryAt = 0;
       } catch(e) {
         if (this.s.runId !== runId) return;
+        if(this.lastAttempt?.id===attempt.id && this.lastAttempt.result==='pending')this.lastAttempt=finishUpdateAttempt(attempt,updateAttemptError(e),e.status);
         this.s.lastError = e.message + ', envio não repetido automaticamente';
         if (e.fatal) { await this.finish('spotify-auth'); return; }
       } finally { this.spotifyAbort = null; }

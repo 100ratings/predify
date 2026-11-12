@@ -13,16 +13,16 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://i.scdn.co https://mosaic.scdn.co data:; connect-src 'self' https://api.spotify.com https://accounts.spotify.com https://11z.co https://predify-inject-lab.omentalistademian.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Predify</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.3.23">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.3.23">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.3.23">
-<link rel="stylesheet" href="style.css?v=1.3.23">
-<script src="startup.js?v=1.3.23"></script>
-<script type="module" src="app.js?v=1.3.23"></script>
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png?v=1.3.24">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png?v=1.3.24">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png?v=1.3.24">
+<link rel="stylesheet" href="style.css?v=1.3.24">
+<script src="startup.js?v=1.3.24"></script>
+<script type="module" src="app.js?v=1.3.24"></script>
 </head>
 <body>
 <div id="app">
-<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.3.23" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
+<header class="topbar"><a class="brand" href="#perform" aria-label="Predify, início"><img src="icons/icon-180.png?v=1.3.24" alt="" width="32" height="32">Predify<span class="beta">01</span></a><button id="account-shortcut" class="account-chip" aria-label="Abrir conexão Spotify"><span id="connection-dot" class="dot"></span><span id="connection-label">Conectar</span></button></header>
 <main id="scroll-area">
 <section id="perform-view" class="view active" aria-labelledby="perform-title">
 <div class="heading"><p class="eyebrow">SUA PRÓXIMA EXPERIÊNCIA</p><h1 id="perform-title">Uma coincidência musical<span class="green">,</span></h1><div class="perform-subline"><p class="subtle">Uma playlist, mais do que parece</p></div></div>
@@ -76,6 +76,17 @@
 <table class="spotify-daily-table"><thead><tr><th scope="col">Dia</th><th scope="col">Chamadas ao Spotify</th></tr></thead><tbody id="spotify-daily-rows"></tbody></table>
 <p class="small subtle">Soma as chamadas deste navegador e as do monitor remoto, chamadas feitas em outros navegadores ou aparelhos precisam do diagnóstico deles</p>
 <p class="small subtle">Inclui tentativas com erro e repetições, exclui Inject, controle do monitor e renovação de autorização, esta contagem não indica quando o limite do Spotify será renovado</p>
+</details>
+<details id="update-attempt" class="diagnostic-advanced"><summary>Última tentativa de atualização</summary>
+<p id="update-attempt-empty" class="small subtle">Nenhuma tentativa registrada ainda, os próximos envios aparecerão aqui</p>
+<dl id="update-attempt-fields" class="update-attempt-fields" hidden>
+<div><dt>Palavra</dt><dd id="update-attempt-word"></dd></div>
+<div><dt>Origem</dt><dd id="update-attempt-origin"></dd></div>
+<div><dt>Horário</dt><dd id="update-attempt-time"></dd></div>
+<div><dt>Resultado</dt><dd id="update-attempt-result" role="status" aria-live="polite"></dd></div>
+</dl>
+<p id="update-attempt-storage" class="small subtle" hidden>Não foi possível salvar o registro neste aparelho, ele pode se perder ao fechar o app</p>
+<p class="small subtle">Abrir este registro não consulta o Spotify, a confirmação indica que ele aceitou a atualização, sem verificar a reprodução das músicas</p>
 </details></div>
 <p class="subtle">Se algo estranho acontecer, registre o teste e envie o arquivo para análise</p>
 <p class="small subtle">Inicie o registro antes do teste, ao terminar, encerre a apresentação e finalize o registro</p>
@@ -117,7 +128,7 @@
 <div class="remote-actions"><button id="remote-configure" class="secondary" type="button" hidden>Alterar conexão</button><button id="remote-unpair" class="secondary" type="button">Desconectar monitor</button></div>
 </section>
 <section class="settings-card"><div class="section-heading"><h2>Conta Spotify</h2><span id="account-state" class="count-badge">Desconectada</span></div><p id="account-name" class="subtle">Conecte a conta que possui suas playlists</p><p id="spotify-connection-error" class="spotify-connection-error small" role="alert" hidden></p><button id="connect" class="primary">Conectar Spotify ↗</button><button id="disconnect" class="secondary" hidden>Desconectar deste aparelho</button><p class="small subtle">A sessão é renovada automaticamente neste aparelho enquanto o Spotify permitir</p></section>
-<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.3.23</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
+<section class="settings-card app-update-card" aria-labelledby="app-update-title"><div class="app-update-row"><div><h2 id="app-update-title">Predify</h2><span id="app-version" class="version">Versão 1.3.24</span></div><button id="update-app" class="secondary" disabled>Atualizar o app</button></div><p id="update-status" class="small subtle" role="status" aria-live="polite">Verificando atualizações a cada 60 s</p></section>
 </div>
 </section>
 </main>

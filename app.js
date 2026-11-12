@@ -1,18 +1,19 @@
-import { sendBlockReasons } from './send-diagnostics.js?v=1.3.23';
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.23';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.23';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.23';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.23';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.23';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.23';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.23';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.23';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.23';
-import { preventZoom } from './zoom.js?v=1.3.23';
-import { watchAppUpdates } from './updates.js?v=1.3.23';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.23';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.23';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.23';
+import { createUpdateAttempt, finishUpdateAttempt, updateAttemptError, createUpdateAttemptStore, ATTEMPT_ORIGINS, ATTEMPT_RESULTS } from './update-attempt.js?v=1.3.24';
+import { sendBlockReasons } from './send-diagnostics.js?v=1.3.24';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.24';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.24';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.24';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.24';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.24';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.24';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.24';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.24';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.24';
+import { preventZoom } from './zoom.js?v=1.3.24';
+import { watchAppUpdates } from './updates.js?v=1.3.24';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.24';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.24';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.24';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -73,6 +74,7 @@ let data = loadData();
 let lastSuccessfulSend = loadLastSuccess();
 let lastManualSuccessfulSend = loadLastSuccess(LAST_MANUAL_SUCCESS_KEY);
 let lastRemoteWord = loadLastRemoteWord();
+const updateAttemptStore = createUpdateAttemptStore();
 let selectedLetter = 'A';
 const playlistCache = createPlaylistCache();
 let playlists = [];
@@ -612,7 +614,9 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
   const target = selected.id;
   sending = true;
   updateButton();
-  let sendStage='backup';
+  const attempt = createUpdateAttempt(submittedWord,inject?'inject':'manual');
+  updateAttemptStore.save(attempt);
+  let sendStage='backup', spotifyAccepted=false;
   try {
     if (inject) {
       // Use the already loaded playlist snapshot, never a network GET before the Inject PUT
@@ -634,6 +638,8 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
     }
     sendStage='write';
     await replacePlaylist(target, sent);
+    spotifyAccepted=true;
+    updateAttemptStore.save(finishUpdateAttempt(attempt,'confirmed'));
     recordDiagnostic('send-accepted',{operation:inject?'selection':'manual-send',items:sent.length});
     // Never show success until Spotify acknowledges the PUT
     lastSuccessfulSend = { playlist: target, word: submittedWord, at: Date.now() };
@@ -663,6 +669,7 @@ async function sendSequenceToSpotify(submittedWord, tracks, { inject = false } =
     paintPlaylist();
     return true;
   } catch (error) {
+    if(!spotifyAccepted)updateAttemptStore.save(finishUpdateAttempt(attempt,updateAttemptError(error,sendStage),error.status));
     recordDiagnostic('send-failed',{operation:inject?'selection':'manual-send',stage:sendStage,status:error.status,reasonCodes:[error.code==='missing-confirmation'?'missing-confirmation':'request-failed']});
     toast(error.message + ' · Confira a playlist antes de repetir', true);
     if (inject) throw error;
@@ -804,6 +811,7 @@ function applyRemoteStatus(state) {
   lastRemoteStatusAt = Date.now(); remoteStatusFailed = false;
   remoteState = state;
   rememberLastRemoteWord(state.lastValue);
+  if (state.lastAttempt) updateAttemptStore.save(state.lastAttempt);
   remoteUnknown = false;
   const sent = state.lastSuccess;
   if (sent?.snapshotId && sent.playlist && sent.word && isNewRemoteConfirmation(sent, lastSuccessfulSend)) {
@@ -1292,6 +1300,16 @@ function paintDiagnostics() {
     tr.append(date,count);return tr;
   });
   $('spotify-daily-rows').replaceChildren(...history);
+  const attempt=updateAttemptStore.get();
+  $('update-attempt-empty').hidden=!!attempt;
+  $('update-attempt-fields').hidden=!attempt;
+  if(attempt){
+    $('update-attempt-word').textContent=attempt.word;
+    $('update-attempt-origin').textContent=ATTEMPT_ORIGINS[attempt.origin];
+    $('update-attempt-time').textContent=new Date(attempt.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
+    $('update-attempt-result').textContent=ATTEMPT_RESULTS[attempt.result];
+  }
+  $('update-attempt-storage').hidden=!updateAttemptStore.storageLimited;
   $('diagnostics-summary').textContent=summary.text;
   $('diagnostic-record-status').textContent = summary.active ? 'Registro em andamento, faça seu teste e finalize quando terminar' : summary.report.tests.length ? 'Registro salvo, você já pode exportar o diagnóstico' : 'Os registros ficam salvos neste aparelho';
   $('diagnostic-begin').disabled=summary.active || remoteState.active || remoteUnknown;

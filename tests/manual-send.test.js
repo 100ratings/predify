@@ -5,6 +5,7 @@ import {readFileSync} from 'node:fs';
 const values=new Map();
 global.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k),get length(){return values.size;},key:i=>[...values.keys()][i]};
 const {playlistTracks,replacePlaylist}=await import('../spotify.js');
+const {createUpdateAttempt,finishUpdateAttempt,updateAttemptError,createUpdateAttemptStore}=await import('../update-attempt.js');
 const {sendBlockReasons}=await import('../send-diagnostics.js');
 const page=readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const helpers=page.slice(page.indexOf('function currentSendReasons('),page.indexOf('function updateButton() {'));
@@ -15,7 +16,7 @@ function fixture(snapshot) {
  const methods=[],notices=[],events=[];
  global.fetch=async(url,opts)=>{methods.push(opts.method||'GET');return Response.json(opts.method==='PUT'?snapshot:{items:[{item:before}],next:null});};
  const elements={};
- const context={sendBlockReasons,remoteBusy:false,remoteUnknown:false,remoteState:{active:false},sequence:{tracks:[after],error:''},lastManualReadiness:'',remoteOwnsPlaylist:()=>false,sending:false,playlistBusy:false,playlistLoading:false,importingCatalog:false,auth:()=>true,data:{playlist:id},playlists:[{id,name:'Test'}],recordDiagnostic:(name,details)=>events.push({name,...details}),updateButton:()=>{},playlistTracks,replacePlaylist,localStorage,
+ const context={createUpdateAttempt,finishUpdateAttempt,updateAttemptError,updateAttemptStore:createUpdateAttemptStore(localStorage),sendBlockReasons,remoteBusy:false,remoteUnknown:false,remoteState:{active:false},sequence:{tracks:[after],error:''},lastManualReadiness:'',remoteOwnsPlaylist:()=>false,sending:false,playlistBusy:false,playlistLoading:false,importingCatalog:false,auth:()=>true,data:{playlist:id},playlists:[{id,name:'Test'}],recordDiagnostic:(name,details)=>events.push({name,...details}),updateButton:()=>{},playlistTracks,replacePlaylist,localStorage,
   lastSuccessfulSend:null,LAST_SUCCESS_KEY:'test.last-success',lastManualSuccessfulSend:null,LAST_MANUAL_SUCCESS_KEY:'test.last-manual-success',paintLastSuccessfulWord:()=>{},playlistItems:[],playlistLoadedFor:'',
   $:id=>elements[id] ||= {append:()=>{}},node:()=>({}),toast:message=>notices.push(message),saveCurrentPlaylistCache:()=>{},paintPlaylist:()=>{}};
  vm.createContext(context);const send=vm.runInContext(source+'\nsendSequenceToSpotify',context);
@@ -28,6 +29,7 @@ test('manual send performs only fresh backup GET and acknowledged PUT, without p
  assert.equal(JSON.parse(values.get('predify.last-backup')).uris[0],before.uri);
  assert.equal(f.context.lastSuccessfulSend.word,'TEST');
  assert.equal(f.context.lastManualSuccessfulSend.word,'TEST');
+ assert.equal(f.context.updateAttemptStore.get().result,'confirmed');
  assert.equal(JSON.parse(values.get('test.last-manual-success')).word,'TEST');
  assert.equal(f.context.playlistItems[0].uri,after.uri);
 });
@@ -37,6 +39,7 @@ test('a PUT without a valid Spotify snapshot cannot mark the manual word as succ
  assert.deepEqual(f.methods,['GET','PUT']);
  assert.equal(f.context.lastSuccessfulSend,null);
  assert.equal(f.context.lastManualSuccessfulSend,null);
+ assert.equal(f.context.updateAttemptStore.get().result,'unknown-write');
  assert.ok(f.notices.some(text=>text.includes('sem confirmação')));
 });
 

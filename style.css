@@ -136,3 +136,5 @@ html,body,body *{touch-action:pan-x pan-y}
 
 /* Reveal only after local settings and cached playlists have been painted */
 .app-starting #app{visibility:hidden}
+
+.update-attempt-fields{font-size:13px;line-height:1.6;margin:12px 0}.update-attempt-fields>div{display:flex;gap:8px;margin-top:7px}.update-attempt-fields dt{font-weight:700;flex:none}.update-attempt-fields dt::after{content:":"}.update-attempt-fields dd{margin:0;min-width:0;overflow-wrap:anywhere}

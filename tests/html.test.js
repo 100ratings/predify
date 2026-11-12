@@ -256,3 +256,14 @@ test('diagnostic tools are collapsed, record/export remain visible and obsolete 
  assert.match(app,/\$\('remote-pairing'\)\.hidden = paired && !remoteConfigOpen/);
  assert.match(app,/\$\('remote-configure'\)\.hidden = !paired/);
 });
+
+test('last update attempt is a separate collapsed section below daily history with no new request action',()=>{
+ const history=html.indexOf('<details id="spotify-daily-history"');
+ const attempt=html.indexOf('<details id="update-attempt"');
+ assert.ok(history>=0&&attempt>history);
+ assert.ok(html.indexOf('</details>',history)<attempt);
+ assert.doesNotMatch(html.slice(attempt,html.indexOf('>',attempt)),/\bopen\b/);
+ for(const field of ['word','origin','time','result'])assert.ok(html.includes('id="update-attempt-'+field+'"'));
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ assert.doesNotMatch(app,/\$\('update-attempt'\)\.(onclick|addEventListener)/);
+});

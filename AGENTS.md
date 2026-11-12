@@ -78,3 +78,8 @@ Restore the remote receipt on reopening, replace it only when status supplies an
 
 On cold launch, startup.js sets the idle viewport before body parsing and holds the interface until synchronous local settings and playlist cache restoration finishes
 Reveal before awaiting OAuth or any remote response, keep the 3-second fail-open fallback and no-JavaScript visibility, do not add startup Spotify reads or alter the manual keyboard layout
+
+Keep Última tentativa de atualização as an independent collapsed section directly below the daily history
+Persist its word, origin, time and allowlisted result separately from anonymous diagnostic exports, merge by actual attempt timestamp so stale remote status never overwrites a newer manual attempt
+Capture only existing send/backup/auth responses, do not add Spotify reads, retries or remote polls when opening the section
+Remote outcomes persist independently of presentation sessions and survive stop/start, mark interrupted or ambiguous writes as unconfirmed, never as success or a guaranteed failure
