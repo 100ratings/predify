@@ -94,3 +94,12 @@ test('daily attempts persist without starting a test and survive reopening',asyn
  assert.equal(reopened.diagnosticReport().spotifyDaily.rows[0].total,before+1);
  assert.equal(reopened.diagnosticReport().tests.some(t=>!t.endedAt),false);
 });
+
+test('remote timing snapshots export only numeric milestones and replace previous measurements',async()=>{
+ const d=await import('../diagnostics.js');const timing={id:'a'.repeat(32),attemptStartedAt:1000,detectedAt:990,result:'confirmed',confirmedAt:1150,word:'private',requests:[{service:'spotify',startedAt:1010,responseAt:1140,status:200,url:'private',token:'private'}]};
+ const snapshot={schema:1,since:1000,totals:{},days:{},runs:[],deliveryTimings:[timing]};
+ d.updateRemoteDiagnostics(snapshot);d.updateRemoteDiagnostics(snapshot);
+ const timings=d.diagnosticReport().cloudflare.deliveryTimings;
+ assert.equal(timings.length,1);assert.equal(timings[0].detectedAt,990);assert.equal(timings[0].requests[0].responseAt,1140);
+ assert.equal(JSON.stringify(timings).includes('private'),false);
+});

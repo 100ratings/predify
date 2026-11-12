@@ -1,11 +1,11 @@
 {
   "name": "predify",
-  "version": "1.3.24",
+  "version": "1.3.25",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check update-attempt.js && node --check startup.js && node --check send-diagnostics.js && node --check request-metrics.js && node --check playlist-cache.js && node --check diagnostics.js && node --check app.js && node --check spotify.js && node --check engine.js && node --check sw.js && node --check catalog-import.js && node --check catalog-search.js && node --check viewport.js && node --check updates.js && node --check version.js && node --check scripts/release.mjs && node --check zoom.js && node --check inject.js && node --check keep-awake.js && node --check remote.js && node --check cloudflare/worker.js && node --check cloudflare/presentation.js",
+    "check": "node --check delivery-timing.js && node --check update-attempt.js && node --check startup.js && node --check send-diagnostics.js && node --check request-metrics.js && node --check playlist-cache.js && node --check diagnostics.js && node --check app.js && node --check spotify.js && node --check engine.js && node --check sw.js && node --check catalog-import.js && node --check catalog-search.js && node --check viewport.js && node --check updates.js && node --check version.js && node --check scripts/release.mjs && node --check zoom.js && node --check inject.js && node --check keep-awake.js && node --check remote.js && node --check cloudflare/worker.js && node --check cloudflare/presentation.js",
     "release": "node scripts/release.mjs"
   }
 }

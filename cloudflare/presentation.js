@@ -1,3 +1,4 @@
+import { cleanDeliveryTiming } from '../delivery-timing.js';
 import { createUpdateAttempt, finishUpdateAttempt, cleanUpdateAttempt, updateAttemptError } from '../update-attempt.js';
 import { metricKey,metricDay,countAttempt,countResult } from '../request-metrics.js';
 import { DurableObject } from 'cloudflare:workers';
@@ -57,6 +58,8 @@ export class PresentationMonitor extends DurableObject {
       this.lastAttempt = cleanUpdateAttempt(await ctx.storage.get('last-update-attempt'));
       this.budget = await ctx.storage.get('budget') || {day:'',attempts:0,activeMs:0};
       this.diag = await ctx.storage.get('diagnostics') || {schema:1,since:Date.now(),totals:{},days:{},runs:[]};
+      this.diag.deliveryTimings=(this.diag.deliveryTimings||[]).map(cleanDeliveryTiming).filter(Boolean).slice(-50);
+      for(const timing of this.diag.deliveryTimings)if(timing.result==='pending'){timing.result='interrupted';timing.finishedAt=Date.now();}
       if ((this.diag.pollCheckpointOpen || this.diag.spotifyCheckpointOpen) && this.s.runId) this.metricRun().possibleGap=true;
       this.diag.pollCheckpointOpen=false; this.diag.spotifyCheckpointOpen=false;
       // A PUT interrupted by a restart has an unknown outcome, never repeat it automatically
@@ -77,16 +80,19 @@ export class PresentationMonitor extends DurableObject {
     if(!run){run={id:this.s.runId,startedAt:this.s.startedAt||Date.now(),endedAt:0,testId:this.s.config?.diagnosticTestId||null,mode:this.s.mode||'test',possibleGap:false,metrics:{}};this.diag.runs.push(run);this.diag.runs=this.diag.runs.slice(-20);}
     return run;
   }
-  async trackedFetch(service,operation,url,options,items=0) {
+  async trackedFetch(service,operation,url,options,items=0,timing=null) {
     const start=Date.now(),day=metricDay(start),key=metricKey(service,operation,options.method||'GET');
+    const requestTiming=timing?{service,checkpointStartedAt:start}:null;
+    if(requestTiming)timing.requests.push(requestTiming);
     const run=this.metricRun();
     const groups=[this.diag.totals,this.diag.days[day] ||= {},run.metrics];
     for(const m of groups)countAttempt(m,key,items);
     for(const old of Object.keys(this.diag.days).sort().slice(0,-14))delete this.diag.days[old];
     // Spotify attempts are checkpointed before transmission, never store credentials in metrics
     if(service!=='inject'){this.diag.spotifyCheckpointOpen=true;await this.save();}
-    try{const response=await fetch(url,options);for(const m of groups)countResult(m,key,response.status,Date.now()-start);return response;}
-    catch(error){for(const m of groups)countResult(m,key,null,Date.now()-start);throw error;}
+    if(requestTiming)requestTiming.startedAt=Date.now();
+    try{const response=await fetch(url,options);if(requestTiming){requestTiming.responseAt=Date.now();requestTiming.status=response.status;}for(const m of groups)countResult(m,key,response.status,Date.now()-start);return response;}
+    catch(error){if(requestTiming)requestTiming.failedAt=Date.now();for(const m of groups)countResult(m,key,null,Date.now()-start);throw error;}
     finally{if(service!=='inject'){this.diag.spotifyCheckpointOpen=false;await this.save();}}
   }
   budgetToday() {
@@ -106,6 +112,8 @@ export class PresentationMonitor extends DurableObject {
     this.s.active = false;
     this.s.phase = reason;
     if(this.s.runId)this.metricRun().endedAt=Date.now();
+    const deliveryTiming=this.diag.deliveryTimings?.find(t=>t.id===this.lastAttempt?.id);
+    if(deliveryTiming?.result==='pending'){deliveryTiming.result=this.s.pending?.phase==='sending'?'interrupted':'cancelled';deliveryTiming.finishedAt=Date.now();}
     if(this.lastAttempt?.result==='pending')this.lastAttempt=finishUpdateAttempt(this.lastAttempt,this.s.pending?.phase==='sending'?'interrupted':'cancelled');
     this.s.pending = null;
     if (this.s.sealedAuth) {
@@ -154,12 +162,12 @@ export class PresentationMonitor extends DurableObject {
     } catch (e) { return Response.json({error:e.message},{status:400}); }
     finally { if (acquiredStart) this.starting = false; }
   }
-  async refreshToken(force = false) {
+  async refreshToken(force = false, timing = null) {
     const runId = this.s.runId;
     if (!this.token) this.token = await unseal(this.s.sealedAuth,this.env.TOKEN_ENCRYPTION_KEY);
     if (!force && this.token.expires_at > Date.now()+60000) return this.token.access_token;
     const res = await this.trackedFetch('spotify-auth','token','https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:new URLSearchParams({grant_type:'refresh_token',refresh_token:this.token.refresh_token,client_id:CLIENT_ID}),signal:AbortSignal.timeout(7000)});
+      body:new URLSearchParams({grant_type:'refresh_token',refresh_token:this.token.refresh_token,client_id:CLIENT_ID}),signal:AbortSignal.timeout(7000)},0,timing);
     const data = await res.json();
     if (!this.s.active || this.s.runId !== runId) throw new Error('Apresentação encerrada');
     if (!res.ok || !data.access_token) {
@@ -181,19 +189,25 @@ export class PresentationMonitor extends DurableObject {
       if (event.retryAt && Date.now() < event.retryAt) return;
       const attempt = createUpdateAttempt(event.value,'remote');
       this.lastAttempt=attempt;
+      const timing={id:attempt.id,runId,result:'pending',attemptStartedAt:attempt.at,requests:[]};
+      for(const key of ['previousPollStartedAt','pollStartedAt','detectedAt'])if(Number.isSafeInteger(event[key]))timing[key]=event[key];
+      (this.diag.deliveryTimings ||= []).push(timing);
+      this.diag.deliveryTimings=this.diag.deliveryTimings.slice(-50);
+      const finishTiming=()=>{timing.result=this.lastAttempt?.id===attempt.id?this.lastAttempt.result:'interrupted';timing.finishedAt=Date.now();};
       const result = buildSequence({name:event.value,catalog:this.s.config.catalog,opening:this.s.config.opening});
-      if (result.error) { this.lastAttempt=finishUpdateAttempt(attempt,'invalid-sequence'); this.s.lastError = result.error; this.s.pending = null; await this.save(); continue; }
+      if (result.error) { this.lastAttempt=finishUpdateAttempt(attempt,'invalid-sequence'); finishTiming(); this.s.lastError = result.error; this.s.pending = null; await this.save(); continue; }
       try {
-        let access = await this.refreshToken();
+        let access = await this.refreshToken(false,timing);
+        timing.tokenReadyAt=Date.now();
         if (!this.s.active || this.s.runId !== runId) return;
         event.phase = 'sending';
         await this.save();
         this.spotifyAbort = new AbortController();
         const put = token => this.trackedFetch('spotify','playlist-items','https://api.spotify.com/v1/playlists/'+this.s.config.playlist+'/items',{
           method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-          body:JSON.stringify({uris:result.tracks.map(t=>t.uri)}),signal:AbortSignal.any([this.spotifyAbort.signal,AbortSignal.timeout(7000)])},result.tracks.length);
+          body:JSON.stringify({uris:result.tracks.map(t=>t.uri)}),signal:AbortSignal.any([this.spotifyAbort.signal,AbortSignal.timeout(7000)])},result.tracks.length,timing);
         let res = await put(access);
-        if (res.status === 401 && this.s.active) { access = await this.refreshToken(true); if (this.s.active) res = await put(access); }
+        if (res.status === 401 && this.s.active) { access = await this.refreshToken(true,timing); if (this.s.active) res = await put(access); }
         const body = await res.json().catch(()=>({}));
         if (!this.s.active || this.s.runId !== runId) return;
         if (res.status === 429) {
@@ -204,6 +218,7 @@ export class PresentationMonitor extends DurableObject {
           if (this.s.pending === event) this.s.pending = event;
           this.s.lastError = 'Spotify limitou os envios, aguardando o prazo solicitado';
           this.lastAttempt=finishUpdateAttempt(attempt,'rate-limit',429);
+          finishTiming();
           await this.save(); return;
         }
         if (res.status === 401 || res.status === 403) {
@@ -216,12 +231,15 @@ export class PresentationMonitor extends DurableObject {
           throw error;
         }
         this.lastAttempt=finishUpdateAttempt(attempt,'confirmed',res.status);
+        timing.confirmedAt=Date.now();
+        finishTiming();
         this.s.lastSuccess = {word:event.value,playlist:this.s.config.playlist,count:event.count,snapshotId:body.snapshot_id,at:Date.now()};
         this.s.lastError = '';
         this.s.spotifyRetryAt = 0;
       } catch(e) {
         if (this.s.runId !== runId) return;
         if(this.lastAttempt?.id===attempt.id && this.lastAttempt.result==='pending')this.lastAttempt=finishUpdateAttempt(attempt,updateAttemptError(e),e.status);
+        finishTiming();
         this.s.lastError = e.message + ', envio não repetido automaticamente';
         if (e.fatal) { await this.finish('spotify-auth'); return; }
       } finally { this.spotifyAbort = null; }
@@ -259,6 +277,7 @@ export class PresentationMonitor extends DurableObject {
         this.kickDelivery(runId);
         const start = Date.now();
         if (start < this.s.nextPollAt) { await sleep(Math.min(500,this.s.nextPollAt-start)); continue; }
+        const previousPollStartedAt=this.s.lastPollAt;
         if (this.s.lastPollAt) sample(this.s.intervals,start-this.s.lastPollAt);
         this.s.lastPollAt = start;
         b.attempts++;
@@ -272,7 +291,7 @@ export class PresentationMonitor extends DurableObject {
           if (this.s.seenCount === null) this.s.seenCount = event.count;
           else if (this.s.seenCount !== event.count) {
             this.s.seenCount = event.count; this.s.changes++; this.s.lastValue = event.value;
-            if (this.s.mode === 'live' && event.value) this.s.pending = {...event,phase:'queued'};
+            if (this.s.mode === 'live' && event.value) this.s.pending = {...event,phase:'queued',previousPollStartedAt,pollStartedAt:start,detectedAt:Date.now()};
             await this.save();
             this.kickDelivery(runId);
           }

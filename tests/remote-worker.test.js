@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const source = fs.readFileSync(new URL('../cloudflare/presentation.js',import.meta.url),'utf8')
   .replace("import { DurableObject } from 'cloudflare:workers';",'class DurableObject { constructor(ctx,env) { this.ctx=ctx; this.env=env; } }')
+  .replace("'../delivery-timing.js'",JSON.stringify(new URL('../delivery-timing.js',import.meta.url).href))
   .replace("'../update-attempt.js'",JSON.stringify(new URL('../update-attempt.js',import.meta.url).href))
   .replace("'../request-metrics.js'",JSON.stringify(new URL('../request-metrics.js',import.meta.url).href))
   .replace("'../engine.js'",JSON.stringify(new URL('../engine.js',import.meta.url).href))
@@ -202,4 +203,30 @@ test('remote attempt persists refusals and ambiguous writes without extra Spotif
    assert.equal(calls,1);
   }
  }finally{globalThis.fetch=original;}
+});
+
+test('remote timeline separates detection, checkpoints and HTTP time without extra requests or writes',async()=>{
+ const {emptyCatalog}=await import('../engine.js');const catalog=emptyCatalog();catalog.A[0]={id:'A'.repeat(22),uri:'spotify:track:'+'A'.repeat(22),name:'Anna Julia',artist:'Los Hermanos',image:''};
+ const f=fixture();await f.ctx.ready;
+ const originalFetch=globalThis.fetch,originalNow=Date.now;let time=1000,calls=0,writes=0;
+ const originalPut=f.ctx.storage.put;
+ f.ctx.storage.put=async(...args)=>{writes++;time+=5;return originalPut(...args);};
+ Date.now=()=>time;
+ const runId=crypto.randomUUID();
+ f.monitor.s={active:true,runId,mode:'live',startedAt:900,endsAt:99999,config:{catalog,playlist:'P'.repeat(22),opening:null},pending:{count:1,value:'a',phase:'queued',previousPollStartedAt:400,pollStartedAt:900,detectedAt:980}};
+ f.monitor.token={access_token:'private',expires_at:9999999};
+ globalThis.fetch=async(url,options)=>{calls++;assert.equal(options.method,'PUT');time+=120;return Response.json({snapshot_id:'confirmed'});};
+ try{
+  await f.monitor.send(runId);
+  const timing=f.monitor.diag.deliveryTimings.at(-1);
+  assert.equal(calls,1);assert.equal(writes,4);
+  assert.equal(timing.detectedAt,980);assert.equal(timing.attemptStartedAt,1000);
+  assert.equal(timing.requests[0].checkpointStartedAt,1005);assert.equal(timing.requests[0].startedAt,1010);
+  assert.equal(timing.requests[0].responseAt,1130);assert.equal(timing.confirmedAt,1135);
+  assert.equal(timing.result,'confirmed');assert.equal(timing.finishedAt,1135);
+  assert.equal(timing.requests[0].status,200);
+  const restarted=fixture(f.state);await restarted.ctx.ready;
+  assert.deepEqual(restarted.monitor.status().diagnostics.deliveryTimings.at(-1),timing);
+  assert.equal(JSON.stringify(timing).includes('private'),false);
+ }finally{globalThis.fetch=originalFetch;Date.now=originalNow;}
 });

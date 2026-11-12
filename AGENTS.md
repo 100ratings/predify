@@ -83,3 +83,8 @@ Keep Última tentativa de atualização as an independent collapsed section dire
 Persist its word, origin, time and allowlisted result separately from anonymous diagnostic exports, merge by actual attempt timestamp so stale remote status never overwrites a newer manual attempt
 Capture only existing send/backup/auth responses, do not add Spotify reads, retries or remote polls when opening the section
 Remote outcomes persist independently of presentation sessions and survive stop/start, mark interrupted or ambiguous writes as unconfirmed, never as success or a guaranteed failure
+
+Remote speed diagnostics retain the last 50 anonymous delivery timelines with Inject poll/detection, attempt preparation, token readiness, actual HTTP dispatch/response and confirmation timestamps
+Capture timestamps around existing operations without adding calls, sleeps or storage writes, retain retries as separate HTTP entries and do not report missing confirmation as success
+Export only allowlisted timestamps, statuses and random run/attempt IDs, never words or credentials, keep timing details under Diagnóstico avançado
+These measurements do not establish when the source Inject input occurred or when the Spotify client visually refreshed

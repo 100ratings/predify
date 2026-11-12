@@ -1,6 +1,7 @@
-import { SEND_REASON_LABELS } from './send-diagnostics.js?v=1.3.24';
-import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.24';
-import { metricKey,metricDay,countAttempt,countResult,mergeMetrics,metricCount } from './request-metrics.js?v=1.3.24';
+import { cleanDeliveryTiming } from './delivery-timing.js?v=1.3.25';
+import { SEND_REASON_LABELS } from './send-diagnostics.js?v=1.3.25';
+import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.25';
+import { metricKey,metricDay,countAttempt,countResult,mergeMetrics,metricCount } from './request-metrics.js?v=1.3.25';
 const LEGACY_KEY='predify.diagnostics.v1', PREFIX='predify.diagnostics.v2.',TESTS_KEY='predify.diagnostic-tests.v2',REMOTE_KEY='predify.remote-metrics.v2';
 const LIMIT=2000, RETENTION_MS=14*86400000;
 const uuid=()=>globalThis.crypto?.randomUUID?.() || Date.now().toString(16)+'-'+Math.random().toString(16).slice(2);
@@ -77,7 +78,7 @@ export function spotifyOperation(path) {
 }
 function safeRemote(value) {
   if(!value||value.schema!==1)return null;
-  return {schema:1,since:Number(value.since)||0,observedAt:Date.now(),totals:mergeMetrics(value.totals),
+  return {schema:1,since:Number(value.since)||0,observedAt:Date.now(),totals:mergeMetrics(value.totals),deliveryTimings:(Array.isArray(value.deliveryTimings)?value.deliveryTimings:[]).slice(-50).map(cleanDeliveryTiming).filter(Boolean),
     days:Object.fromEntries(Object.entries(value.days||{}).filter(([d])=>/^\d{4}-\d{2}-\d{2}$/.test(d)).slice(-14).map(([d,m])=>[d,mergeMetrics(m)])),
     runs:(value.runs||[]).slice(-20).map(r=>({id:validId(r.id)?r.id:'',startedAt:Number(r.startedAt)||0,endedAt:Number(r.endedAt)||0,testId:validId(r.testId)?r.testId:null,mode:r.mode==='live'?'live':'test',possibleGap:!!r.possibleGap,metrics:mergeMetrics(r.metrics)})),
     lastSpotifyLimit:value.lastSpotifyLimit?{at:Number(value.lastSpotifyLimit.at)||0,reason:value.lastSpotifyLimit.reason==='QUOTA_EXCEEDED'?'QUOTA_EXCEEDED':'',retryAfter:Number.isFinite(value.lastSpotifyLimit.retryAfter)?value.lastSpotifyLimit.retryAfter:null}:null};
