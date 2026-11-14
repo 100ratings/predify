@@ -1,7 +1,7 @@
 // The last user-visible attempt is separate from anonymous technical diagnostics
 export const UPDATE_ATTEMPT_KEY = 'predify.last-update-attempt.v1';
 export const UPDATE_ATTEMPT_HISTORY_KEY = 'predify.update-attempt-history.v1';
-export const UPDATE_ATTEMPT_LIMIT = 5;
+export const UPDATE_ATTEMPT_LIMIT = 3;
 export const ATTEMPT_RESULTS = {
   pending:'Aguardando confirmação, se a tentativa foi interrompida, confira a playlist antes de repetir',
   confirmed:'Atualização confirmada pelo Spotify',

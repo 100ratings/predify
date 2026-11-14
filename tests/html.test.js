@@ -264,7 +264,7 @@ test('last update attempt is a separate collapsed section below daily history wi
  assert.ok(html.indexOf('</details>',history)<attempt);
  assert.doesNotMatch(html.slice(attempt,html.indexOf('>',attempt)),/\bopen\b/);
  assert.ok(html.includes('id="update-attempt-list"'));
- assert.ok(html.includes('Últimas 5 tentativas de atualização'));
+ assert.ok(html.includes('Últimas 3 tentativas de atualização'));
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
  assert.doesNotMatch(app,/\$\('update-attempt'\)\.(onclick|addEventListener)/);
 });

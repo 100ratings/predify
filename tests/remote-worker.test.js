@@ -231,7 +231,7 @@ test('remote timeline separates detection, checkpoints and HTTP time without ext
  }finally{globalThis.fetch=originalFetch;Date.now=originalNow;}
 });
 
-test('five remote attempts survive offline sends, restart and session changes without extra Spotify calls or checkpoints',async()=>{
+test('three remote attempts survive offline sends, restart and session changes without extra Spotify calls or checkpoints',async()=>{
  const {emptyCatalog}=await import('../engine.js');const catalog=emptyCatalog();
  catalog.A[0]={id:'A'.repeat(22),uri:'spotify:track:'+'A'.repeat(22),name:'Anna Julia',artist:'Los Hermanos',image:''};
  const f=fixture();await f.ctx.ready;
@@ -241,13 +241,13 @@ test('five remote attempts survive offline sends, restart and session changes wi
  const runId=crypto.randomUUID();
  f.monitor.s={active:true,runId,mode:'live',startedAt:900,endsAt:99999,config:{catalog,playlist:'P'.repeat(22),opening:null}};
  f.monitor.token={access_token:'private',expires_at:9999999};
- globalThis.fetch=async(url,options)=>{calls++;assert.equal(options.method,'PUT');if(calls===4)throw new TypeError('network');return Response.json({snapshot_id:'confirmed'});};
+ globalThis.fetch=async(url,options)=>{calls++;assert.equal(options.method,'PUT');if(calls===6)throw new TypeError('network');return Response.json({snapshot_id:'confirmed'});};
  try{
   for(let i=1;i<=7;i++){time+=1000;f.monitor.s.pending={count:i,value:'a',phase:'queued'};await f.monitor.send(runId);}
   assert.equal(calls,7);assert.equal(writes,28);
   const history=f.monitor.status().attemptHistory;
-  assert.equal(history.length,5);assert.deepEqual(history.map(a=>a.at),[8000,7000,6000,5000,4000]);
-  assert.equal(history.find(a=>a.at===5000).result,'unknown-write');
+  assert.equal(history.length,3);assert.deepEqual(history.map(a=>a.at),[8000,7000,6000]);
+  assert.equal(history.find(a=>a.at===7000).result,'unknown-write');
   assert.ok(history.every(a=>a.origin==='remote'));
   assert.equal(JSON.stringify(f.monitor.diag).includes('"word"'),false);
   const restarted=fixture(f.state);await restarted.ctx.ready;

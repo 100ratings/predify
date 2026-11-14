@@ -34,7 +34,7 @@ test('attempt records retain only explicit user fields, errors never retain toke
  const store=createUpdateAttemptStore(f.storage);store.save(value);assert.equal(store.get().word,'Name');assert.equal(store.storageLimited,true);
 });
 
-test('history migrates the old record, merges remote failures with manual successes and keeps only the five newest',()=>{
+test('history migrates the old record, merges remote failures with manual successes and keeps only the three newest',()=>{
  const f=fixture();
  const old=finishUpdateAttempt(createUpdateAttempt('Previous','manual',1000),'confirmed');
  f.saved.set('predify.last-update-attempt.v1',JSON.stringify(old));
@@ -44,7 +44,7 @@ test('history migrates the old record, merges remote failures with manual succes
  store.save(remote.slice(0,3));
  const manual=finishUpdateAttempt(createUpdateAttempt('Manual','manual',6500),'confirmed');store.save(manual);
  store.save(remote);
- assert.deepEqual(store.list().map(a=>a.word),['Remote 5','Manual','Remote 4','Remote 3','Remote 2']);
+ assert.deepEqual(store.list().map(a=>a.word),['Remote 5','Manual','Remote 4']);
  const writes=f.writes;store.save(remote);store.list();assert.equal(f.writes,writes);
  assert.deepEqual(createUpdateAttemptStore(f.storage).list(),store.list());
  // Delayed old snapshots cannot evict a later attempt or restore an old pending result
