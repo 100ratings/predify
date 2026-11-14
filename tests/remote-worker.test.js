@@ -230,3 +230,30 @@ test('remote timeline separates detection, checkpoints and HTTP time without ext
   assert.equal(JSON.stringify(timing).includes('private'),false);
  }finally{globalThis.fetch=originalFetch;Date.now=originalNow;}
 });
+
+test('five remote attempts survive offline sends, restart and session changes without extra Spotify calls or checkpoints',async()=>{
+ const {emptyCatalog}=await import('../engine.js');const catalog=emptyCatalog();
+ catalog.A[0]={id:'A'.repeat(22),uri:'spotify:track:'+'A'.repeat(22),name:'Anna Julia',artist:'Los Hermanos',image:''};
+ const f=fixture();await f.ctx.ready;
+ const originalFetch=globalThis.fetch,originalNow=Date.now;let calls=0,writes=0,time=1000;
+ const originalPut=f.ctx.storage.put;f.ctx.storage.put=async(...args)=>{writes++;return originalPut(...args);};
+ Date.now=()=>time;
+ const runId=crypto.randomUUID();
+ f.monitor.s={active:true,runId,mode:'live',startedAt:900,endsAt:99999,config:{catalog,playlist:'P'.repeat(22),opening:null}};
+ f.monitor.token={access_token:'private',expires_at:9999999};
+ globalThis.fetch=async(url,options)=>{calls++;assert.equal(options.method,'PUT');if(calls===4)throw new TypeError('network');return Response.json({snapshot_id:'confirmed'});};
+ try{
+  for(let i=1;i<=7;i++){time+=1000;f.monitor.s.pending={count:i,value:'a',phase:'queued'};await f.monitor.send(runId);}
+  assert.equal(calls,7);assert.equal(writes,28);
+  const history=f.monitor.status().attemptHistory;
+  assert.equal(history.length,5);assert.deepEqual(history.map(a=>a.at),[8000,7000,6000,5000,4000]);
+  assert.equal(history.find(a=>a.at===5000).result,'unknown-write');
+  assert.ok(history.every(a=>a.origin==='remote'));
+  assert.equal(JSON.stringify(f.monitor.diag).includes('"word"'),false);
+  const restarted=fixture(f.state);await restarted.ctx.ready;
+  assert.deepEqual(restarted.monitor.status().attemptHistory,history);
+  await restarted.monitor.fetch(request('stop',{}));
+  await restarted.monitor.fetch(request('start',{mode:'test',injectId:'5156',minutes:1}));
+  assert.deepEqual(restarted.monitor.status().attemptHistory,history);assert.equal(calls,7);
+ }finally{globalThis.fetch=originalFetch;Date.now=originalNow;}
+});

@@ -1,20 +1,20 @@
-import { deliveryTimingSummary } from './delivery-timing.js?v=1.3.25';
-import { createUpdateAttempt, finishUpdateAttempt, updateAttemptError, createUpdateAttemptStore, ATTEMPT_ORIGINS, ATTEMPT_RESULTS } from './update-attempt.js?v=1.3.25';
-import { sendBlockReasons } from './send-diagnostics.js?v=1.3.25';
-import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.25';
-import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.25';
-import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.25';
-import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.25';
-import { SUGGESTIONS } from './suggestions.js?v=1.3.25';
-import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.25';
-import { validateCandidateCatalog } from './catalog-import.js?v=1.3.25';
-import { playlistCoverAssets } from './playlist-cover.js?v=1.3.25';
-import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.25';
-import { preventZoom } from './zoom.js?v=1.3.25';
-import { watchAppUpdates } from './updates.js?v=1.3.25';
-import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.25';
-import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.25';
-import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.25';
+import { deliveryTimingSummary } from './delivery-timing.js?v=1.3.26';
+import { createUpdateAttempt, finishUpdateAttempt, updateAttemptError, createUpdateAttemptStore, ATTEMPT_ORIGINS, ATTEMPT_RESULTS } from './update-attempt.js?v=1.3.26';
+import { sendBlockReasons } from './send-diagnostics.js?v=1.3.26';
+import { createPlaylistCache, PLAYLIST_CACHE_KEY } from './playlist-cache.js?v=1.3.26';
+import { recordDiagnostic, diagnosticReport, diagnosticFetch, diagnosticSummary, spotifyDailyHistory, beginDiagnosticTest, endDiagnosticTest, currentDiagnosticTest } from './diagnostics.js?v=1.3.26';
+import { ALPHABET, MAX_TRACKS_PER_LETTER, MIN_TRACKS_PER_LETTER, catalogHealth, DEFAULT_PHRASE, letters, emptyCatalog, spotifyId, cleanTrack, validateCatalog, validateOpening, validateOpeningDraft, openingConflicts, checkOpeningCandidate, buildSequence, moveCatalogTrack } from './engine.js?v=1.3.26';
+import { SEARCH_PAGE_SIZE, searchPage } from './catalog-search.js?v=1.3.26';
+import { SUGGESTIONS } from './suggestions.js?v=1.3.26';
+import { auth, connect, disconnect, finishLogin, myPlaylists, trackFromLink, playlistTracks, playlistCoverImages, replacePlaylist, searchTracks, resolveCatalogCandidate } from './spotify.js?v=1.3.26';
+import { validateCandidateCatalog } from './catalog-import.js?v=1.3.26';
+import { playlistCoverAssets } from './playlist-cover.js?v=1.3.26';
+import { sameSong, removeCatalogSlot, applySuggestedTrack } from './catalog-actions.js?v=1.3.26';
+import { preventZoom } from './zoom.js?v=1.3.26';
+import { watchAppUpdates } from './updates.js?v=1.3.26';
+import { viewportLayout, keyboardComposerScrollDelta, MANUAL_KEYBOARD_OFFSET_PX } from './viewport.js?v=1.3.26';
+import { validInjectId, INJECT_ID_KEY, fetchInjectSelection, createInjectMonitor } from './inject.js?v=1.3.26';
+import { remoteKey, saveRemoteKey, consumeRemoteLink, remoteRequest, REMOTE_KEY_STORAGE, isNewRemoteConfirmation, remoteStatusInterval } from './remote.js?v=1.3.26';
 try { consumeRemoteLink(); } catch { /* A malformed pairing link must not break the app */ }
 let remoteState = { active: false };
 let remoteBusy = false, remoteReading = false, remoteUnknown = !!remoteKey();
@@ -812,7 +812,7 @@ function applyRemoteStatus(state) {
   lastRemoteStatusAt = Date.now(); remoteStatusFailed = false;
   remoteState = state;
   rememberLastRemoteWord(state.lastValue);
-  if (state.lastAttempt) updateAttemptStore.save(state.lastAttempt);
+  if (state.lastAttempt || Array.isArray(state.attemptHistory)) updateAttemptStore.save([...(Array.isArray(state.attemptHistory)?state.attemptHistory:[]),state.lastAttempt]);
   remoteUnknown = false;
   const sent = state.lastSuccess;
   if (sent?.snapshotId && sent.playlist && sent.word && isNewRemoteConfirmation(sent, lastSuccessfulSend)) {
@@ -1301,15 +1301,7 @@ function paintDiagnostics() {
     tr.append(date,count);return tr;
   });
   $('spotify-daily-rows').replaceChildren(...history);
-  const attempt=updateAttemptStore.get();
-  $('update-attempt-empty').hidden=!!attempt;
-  $('update-attempt-fields').hidden=!attempt;
-  if(attempt){
-    $('update-attempt-word').textContent=attempt.word;
-    $('update-attempt-origin').textContent=ATTEMPT_ORIGINS[attempt.origin];
-    $('update-attempt-time').textContent=new Date(attempt.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
-    $('update-attempt-result').textContent=ATTEMPT_RESULTS[attempt.result];
-  }
+  paintUpdateAttempts();
   $('update-attempt-storage').hidden=!updateAttemptStore.storageLimited;
   $('diagnostics-summary').textContent=summary.text;
   $('delivery-timing-summary').textContent=deliveryTimingSummary(summary.report.cloudflare?.deliveryTimings?.at(-1));
@@ -1320,6 +1312,23 @@ function paintDiagnostics() {
     (summary.report.coverage.remotePossibleGap?'Houve reinício remoto com operação em andamento, pode haver lacuna na medição. ':'')+
     (remoteState.active?'Encerre a apresentação antes de iniciar ou finalizar um registro. ':'')+
     (summary.report.cloudflare?'Contadores remotos recebidos em '+new Date(summary.report.cloudflare.observedAt).toLocaleTimeString('pt-BR'):'Aguardando contadores da Cloudflare');
+}
+
+function paintUpdateAttempts() {
+  const attempts=updateAttemptStore.list();
+  $('update-attempt-empty').hidden=attempts.length>0;
+  $('update-attempt-list').hidden=!attempts.length;
+  const entries=attempts.map(attempt=>{
+    const item=document.createElement('li');
+    const fields=document.createElement('dl');fields.className='update-attempt-fields';
+    const values={Palavra:attempt.word,Origem:ATTEMPT_ORIGINS[attempt.origin],Horário:new Date(attempt.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}),Resultado:ATTEMPT_RESULTS[attempt.result]};
+    for(const [label,value] of Object.entries(values)){
+      const row=document.createElement('div'),title=document.createElement('dt'),text=document.createElement('dd');
+      title.textContent=label;text.textContent=value;row.append(title,text);fields.append(row);
+    }
+    item.append(fields);return item;
+  });
+  $('update-attempt-list').replaceChildren(...entries);
 }
 $('diagnostic-begin').onclick=()=>{if(remoteState.active || remoteUnknown)return;beginDiagnosticTest();recordManualReadiness(true);lastRemoteReadiness='';paintRemote();paintDiagnostics();};
 $('diagnostic-end').onclick=async()=>{

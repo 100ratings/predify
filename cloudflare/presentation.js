@@ -1,5 +1,5 @@
 import { cleanDeliveryTiming } from '../delivery-timing.js';
-import { createUpdateAttempt, finishUpdateAttempt, cleanUpdateAttempt, updateAttemptError } from '../update-attempt.js';
+import { createUpdateAttempt, finishUpdateAttempt, cleanUpdateAttempt, mergeUpdateAttempts, updateAttemptError } from '../update-attempt.js';
 import { metricKey,metricDay,countAttempt,countResult } from '../request-metrics.js';
 import { DurableObject } from 'cloudflare:workers';
 import { buildSequence, validateCatalog, validateOpening, openingConflicts } from '../engine.js';
@@ -56,6 +56,8 @@ export class PresentationMonitor extends DurableObject {
     ctx.blockConcurrencyWhile(async () => {
       this.s = await ctx.storage.get('presentation') || {active:false,phase:'idle'};
       this.lastAttempt = cleanUpdateAttempt(await ctx.storage.get('last-update-attempt'));
+      const history = await ctx.storage.get('update-attempt-history');
+      this.attemptHistory = mergeUpdateAttempts(Array.isArray(history)?history:[],this.lastAttempt);
       this.budget = await ctx.storage.get('budget') || {day:'',attempts:0,activeMs:0};
       this.diag = await ctx.storage.get('diagnostics') || {schema:1,since:Date.now(),totals:{},days:{},runs:[]};
       this.diag.deliveryTimings=(this.diag.deliveryTimings||[]).map(cleanDeliveryTiming).filter(Boolean).slice(-50);
@@ -74,7 +76,10 @@ export class PresentationMonitor extends DurableObject {
       }
     });
   }
-  save() { return this.ctx.storage.put({presentation:this.s,budget:this.budget,diagnostics:this.diag,'last-update-attempt':this.lastAttempt}); }
+  save() {
+    this.attemptHistory = mergeUpdateAttempts(this.attemptHistory,this.lastAttempt);
+    return this.ctx.storage.put({presentation:this.s,budget:this.budget,diagnostics:this.diag,'last-update-attempt':this.lastAttempt,'update-attempt-history':this.attemptHistory});
+  }
   metricRun() {
     let run=this.diag.runs.find(r=>r.id===this.s.runId);
     if(!run){run={id:this.s.runId,startedAt:this.s.startedAt||Date.now(),endedAt:0,testId:this.s.config?.diagnosticTestId||null,mode:this.s.mode||'test',possibleGap:false,metrics:{}};this.diag.runs.push(run);this.diag.runs=this.diag.runs.slice(-20);}
@@ -102,7 +107,7 @@ export class PresentationMonitor extends DurableObject {
   }
   status() {
     const s = this.s;
-    return {updateAttemptSchema:1,lastAttempt:this.lastAttempt,diagnostics:this.diag,active:s.active,phase:s.phase,mode:s.mode,playlist:s.config?.playlist || '',runId:s.runId,startedAt:s.startedAt,endsAt:s.endsAt,
+    return {updateAttemptSchema:2,lastAttempt:this.lastAttempt,attemptHistory:mergeUpdateAttempts(this.attemptHistory,this.lastAttempt),diagnostics:this.diag,active:s.active,phase:s.phase,mode:s.mode,playlist:s.config?.playlist || '',runId:s.runId,startedAt:s.startedAt,endsAt:s.endsAt,
       polls:s.polls || 0,errors:s.errors || 0,changes:s.changes || 0,lastPollAt:s.lastPollAt,lastReadAt:s.lastReadAt,
       lastValue:s.lastValue || '',lastSuccess:s.lastSuccess || null,lastError:s.lastError || s.injectError || '',pending:!!s.pending,
       intervalMs:stats(s.intervals || []),fetchMs:stats(s.latencies || []),serverNow:Date.now(),dailyAttempts:this.budgetToday().attempts,authUpdatedAt:s.authUpdatedAt || 0,syncAvailable:!!s.syncAuth && s.syncUntil > Date.now()};

@@ -1,5 +1,7 @@
 // The last user-visible attempt is separate from anonymous technical diagnostics
 export const UPDATE_ATTEMPT_KEY = 'predify.last-update-attempt.v1';
+export const UPDATE_ATTEMPT_HISTORY_KEY = 'predify.update-attempt-history.v1';
+export const UPDATE_ATTEMPT_LIMIT = 5;
 export const ATTEMPT_RESULTS = {
   pending:'Aguardando confirmação, se a tentativa foi interrompida, confira a playlist antes de repetir',
   confirmed:'Atualização confirmada pelo Spotify',
@@ -38,13 +40,28 @@ export function updateAttemptError(error,stage='write') {
 export function newestUpdateAttempt(...values) {
   return values.map(cleanUpdateAttempt).filter(Boolean).reverse().sort((a,b)=>b.at-a.at || b.updatedAt-a.updatedAt)[0] || null;
 }
+// Merge repeated status snapshots by ID, never let a stale pending snapshot
+// replace a completed result, and order by attempt time rather than reply time
+export function mergeUpdateAttempts(...values) {
+  const byId = new Map();
+  for (const value of values.flat()) {
+    const next = cleanUpdateAttempt(value);
+    if (!next) continue;
+    const previous = byId.get(next.id);
+    if (!previous || (previous.result === 'pending' && next.result !== 'pending') ||
+      ((previous.result === 'pending') === (next.result === 'pending') && next.updatedAt >= previous.updatedAt)) byId.set(next.id,next);
+  }
+  return [...byId.values()].sort((a,b)=>b.at-a.at || b.id.localeCompare(a.id)).slice(0,UPDATE_ATTEMPT_LIMIT);
+}
 export function createUpdateAttemptStore(storage=globalThis.localStorage) {
-  let current=null,storageLimited=false;
-  function read() {try{return cleanUpdateAttempt(JSON.parse(storage.getItem(UPDATE_ATTEMPT_KEY)));}catch{return null;}}
-  current=read();
+  let current=[],storageLimited=false;
+  function read(key) {try{return JSON.parse(storage.getItem(key));}catch{return null;}}
+  const readHistory=()=>{const value=read(UPDATE_ATTEMPT_HISTORY_KEY);return Array.isArray(value)?value:[];};
+  current=mergeUpdateAttempts(read(UPDATE_ATTEMPT_KEY),readHistory());
   return {
-    get(){current=newestUpdateAttempt(current,read());return current;},
-    save(value){const next=newestUpdateAttempt(current,read(),value);if(!next)return current;if(JSON.stringify(next)!==JSON.stringify(current)){current=next;try{storage.setItem(UPDATE_ATTEMPT_KEY,JSON.stringify(current));}catch{storageLimited=true;}}return current;},
+    get(){return this.list()[0] || null;},
+    list(){current=mergeUpdateAttempts(current,readHistory());return current;},
+    save(value){const next=mergeUpdateAttempts(current,readHistory(),value);if(JSON.stringify(next)!==JSON.stringify(current)){current=next;try{storage.setItem(UPDATE_ATTEMPT_HISTORY_KEY,JSON.stringify(current));}catch{storageLimited=true;}}return current[0] || null;},
     get storageLimited(){return storageLimited;}
   };
 }

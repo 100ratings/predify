@@ -138,3 +138,5 @@ html,body,body *{touch-action:pan-x pan-y}
 .app-starting #app{visibility:hidden}
 
 .update-attempt-fields{font-size:13px;line-height:1.6;margin:12px 0}.update-attempt-fields>div{display:flex;gap:8px;margin-top:7px}.update-attempt-fields dt{font-weight:700;flex:none}.update-attempt-fields dt::after{content:":"}.update-attempt-fields dd{margin:0;min-width:0;overflow-wrap:anywhere}
+
+.update-attempt-list{list-style:none;padding:0;margin:12px 0;min-width:0}.update-attempt-list>li+li{border-top:1px solid var(--line);margin-top:14px;padding-top:2px}.update-attempt-list .update-attempt-fields>div{flex-wrap:wrap;gap:2px 8px}.update-attempt-list dd{max-width:100%}
