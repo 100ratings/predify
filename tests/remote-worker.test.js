@@ -257,3 +257,43 @@ test('three remote attempts survive offline sends, restart and session changes w
   assert.deepEqual(restarted.monitor.status().attemptHistory,history);assert.equal(calls,7);
  }finally{globalThis.fetch=originalFetch;Date.now=originalNow;}
 });
+
+test('remote durations are limited to two hours on the server, one-minute read-only diagnostics remain valid',()=>{
+ for(const minutes of [15,30,60,120])assert.equal(validateStart({injectId:'5156',mode:'test',minutes}).durationMs,minutes*60000);
+ for(const minutes of [121,180,240])assert.throws(()=>validateStart({injectId:'5156',mode:'test',minutes}),/120 minutos/);
+ assert.equal(validateStart({injectId:'5156',mode:'test',minutes:1}).durationMs,60000);
+});
+
+test('expired server alarm stops a persisted session without any browser or outgoing request',async()=>{
+ const f=fixture({presentation:{active:true,phase:'monitoring',runId:crypto.randomUUID(),mode:'live',startedAt:Date.now()-7201000,endsAt:Date.now()-1000,pending:{phase:'queued',value:'a'}}});
+ await f.ctx.ready;const original=globalThis.fetch;let calls=0;
+ globalThis.fetch=async()=>{calls++;throw Error('Unexpected network request');};
+ try{
+  await f.monitor.alarm();assert.equal(calls,0);assert.equal(f.monitor.status().active,false);assert.equal(f.monitor.s.phase,'expired');assert.equal(f.monitor.s.pending,null);
+  const restarted=fixture(f.state);await restarted.ctx.ready;await restarted.monitor.alarm();assert.equal(calls,0);assert.equal(restarted.monitor.s.phase,'expired');
+ }finally{globalThis.fetch=original;}
+});
+
+test('a late Inject response cannot start Spotify after the saved deadline',async()=>{
+ const f=fixture();await f.ctx.ready;
+ const originalFetch=globalThis.fetch,originalNow=Date.now;let time=1000,calls=0;
+ Date.now=()=>time;
+ f.monitor.s={active:true,phase:'monitoring',runId:crypto.randomUUID(),mode:'live',startedAt:900,endsAt:1100,config:{injectId:'5156'},seenCount:1,polls:0,intervals:[],latencies:[]};
+ globalThis.fetch=async(url)=>{calls++;assert.match(String(url),/^https:\/\/11z.co\//);time=1200;return Response.json({count:2,value:'a'});};
+ try{await f.monitor.alarm();assert.equal(calls,1);assert.equal(f.monitor.s.phase,'expired');assert.equal(f.monitor.s.pending,null);assert.equal(f.monitor.s.lastValue,undefined);}
+ finally{globalThis.fetch=originalFetch;Date.now=originalNow;}
+});
+
+test('a queued send or token refresh crossing the deadline cannot start a Spotify write',async()=>{
+ const {emptyCatalog}=await import('../engine.js');const catalog=emptyCatalog();catalog.A[0]={id:'A'.repeat(22),uri:'spotify:track:'+'A'.repeat(22),name:'Anna Julia',artist:'Los Hermanos',image:''};
+ const originalFetch=globalThis.fetch,originalNow=Date.now;let time=1000,calls=0;
+ Date.now=()=>time;globalThis.fetch=async()=>{calls++;throw Error('Unexpected Spotify request');};
+ try{
+  for(const delayed of [false,true]){
+   time=1000;const f=fixture();await f.ctx.ready;const runId=crypto.randomUUID();
+   f.monitor.s={active:true,phase:'monitoring',runId,mode:'live',startedAt:900,endsAt:delayed?1100:999,config:{catalog,opening:null},pending:{value:'a',count:2,phase:'queued'}};
+   if(delayed)f.monitor.refreshToken=async()=>{time=1200;return 'private';};
+   await f.monitor.send(runId);assert.equal(f.monitor.s.phase,'expired');assert.equal(calls,0);
+  }
+ }finally{globalThis.fetch=originalFetch;Date.now=originalNow;}
+});

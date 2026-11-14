@@ -90,3 +90,6 @@ Remote speed diagnostics retain the last 50 anonymous delivery timelines with In
 Capture timestamps around existing operations without adding calls, sleeps or storage writes, retain retries as separate HTTP entries and do not report missing confirmation as success
 Export only allowlisted timestamps, statuses and random run/attempt IDs, never words or credentials, keep timing details under Diagnóstico avançado
 These measurements do not establish when the source Inject input occurred or when the Spotify client visually refreshed
+
+Remote presentation choices are 15, 30, 60 and 120 minutes, enforce the two-hour maximum on the server too
+Expiration uses the persisted server deadline and alarms independently of any browser, do not send newly detected words after the deadline or after a token refresh crosses it

@@ -6,7 +6,7 @@ import { buildSequence, validateCatalog, validateOpening, openingConflicts } fro
 import { fetchInjectSelection } from '../inject.js';
 
 const CLIENT_ID = 'ea812e9b0ada47778150c48b62bf02ee';
-const MAX_MS = 4 * 60 * 60 * 1000;
+const MAX_MS = 2 * 60 * 60 * 1000;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function stats(values) {
   const v = [...values].sort((a,b) => a-b);
@@ -29,7 +29,7 @@ export function validateStart(input) {
   if (!input || !/^[0-9]{4}$/.test(input.injectId)) throw new Error('Informe o ID de 4 dígitos do Inject');
   if (!['test','live'].includes(input.mode)) throw new Error('Modo inválido');
   const minutes = Number(input.minutes ?? 120);
-  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 240) throw new Error('Use entre 1 e 240 minutos');
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 120) throw new Error('Use entre 1 e 120 minutos');
   const out = {injectId:input.injectId,mode:input.mode,durationMs:Math.min(MAX_MS,minutes*60000),diagnosticTestId:typeof input.diagnosticTestId==='string'&&/^[a-f0-9-]{8,64}$/.test(input.diagnosticTestId)?input.diagnosticTestId:null};
   if (input.mode === 'live') {
     if (!/^[A-Za-z0-9]{22}$/.test(input.playlist || '')) throw new Error('Selecione uma playlist');
@@ -189,6 +189,7 @@ export class PresentationMonitor extends DurableObject {
   }
   async send(runId) {
     while (this.s.active && this.s.runId === runId && this.s.pending) {
+      if (Date.now() >= this.s.endsAt) return this.finish('expired');
       if (Date.now() < (this.s.spotifyRetryAt || 0)) return;
       const event = this.s.pending;
       if (event.retryAt && Date.now() < event.retryAt) return;
@@ -205,6 +206,7 @@ export class PresentationMonitor extends DurableObject {
         let access = await this.refreshToken(false,timing);
         timing.tokenReadyAt=Date.now();
         if (!this.s.active || this.s.runId !== runId) return;
+        if (Date.now() >= this.s.endsAt) return this.finish('expired');
         event.phase = 'sending';
         await this.save();
         this.spotifyAbort = new AbortController();
@@ -212,7 +214,11 @@ export class PresentationMonitor extends DurableObject {
           method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
           body:JSON.stringify({uris:result.tracks.map(t=>t.uri)}),signal:AbortSignal.any([this.spotifyAbort.signal,AbortSignal.timeout(7000)])},result.tracks.length,timing);
         let res = await put(access);
-        if (res.status === 401 && this.s.active) { access = await this.refreshToken(true,timing); if (this.s.active) res = await put(access); }
+        if (res.status === 401 && this.s.active) {
+          access = await this.refreshToken(true,timing);
+          if (this.s.active && Date.now() >= this.s.endsAt) return this.finish('expired');
+          if (this.s.active) res = await put(access);
+        }
         const body = await res.json().catch(()=>({}));
         if (!this.s.active || this.s.runId !== runId) return;
         if (res.status === 429) {
@@ -290,6 +296,7 @@ export class PresentationMonitor extends DurableObject {
         try {
           const event = await fetchInjectSelection(this.s.config.injectId,{timeout:4000,fetcher:(url,opts)=>this.trackedFetch('inject','selection',url,{...opts,signal:AbortSignal.any([this.abort.signal,opts.signal])})});
           if (!this.s.active || this.s.runId !== runId) break;
+          if (Date.now() >= this.s.endsAt) { await this.finish('expired'); break; }
           this.s.polls++; this.s.lastReadAt = Date.now(); sample(this.s.latencies,Date.now()-start);
           this.s.errorStreak = 0; this.s.nextPollAt = 0;
           this.s.injectError = '';

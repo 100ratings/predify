@@ -268,3 +268,10 @@ test('last update attempt is a separate collapsed section below daily history wi
  const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
  assert.doesNotMatch(app,/\$\('update-attempt'\)\.(onclick|addEventListener)/);
 });
+
+test('presentation duration choices stop at two hours and ignore obsolete saved three/four-hour choices',()=>{
+ const options=html.match(/<select id="remote-duration">([\s\S]*?)<\/select>/)[1];
+ assert.deepEqual([...options.matchAll(/value="(\d+)"/g)].map(m=>m[1]),['15','30','60','120']);
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ assert.match(app,/\['15','30','60','120'\]\.includes\(savedDuration\)/);
+});

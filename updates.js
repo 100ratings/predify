@@ -1,4 +1,4 @@
-import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.27';
+import { APP_VERSION, BUILD_ID } from './version.js?v=1.3.28';
 export const CHECK_INTERVAL = 60_000;
 export function validRelease(value) {
   if (!value || !/^\d+\.\d+\.\d+$/.test(value.version) || !/^[a-zA-Z0-9._-]{1,100}$/.test(value.build)) throw new Error('Não foi possível conferir a versão publicada');
